@@ -1,36 +1,53 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# HTN payment gateway
 
-## Getting Started
+A minimal HTN payment gateway for Hoosat cryptocurrency. Allows merchants to create payment requests and display QR codes for buyers to scan and pay.
 
-First, run the development server:
+## Features
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+- Create payment requests with custom amounts
+- Generate QR codes containing Hoosat payment URIs
+- **Real payment confirmation checking** via Hoosat blockchain using the official Hoosat SDK
+- **Seperate payment gateway** - all payments go to your configured payment gateway wallet
+- Automatic payment confirmation when funds are received and sweeped upwards to merchant bigger wallet
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Setup
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1. **Install dependencies:**
+   ```bash
+   npm install
+   ```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+2. **Configure merchant wallet:**
+   
+   Create a `.env.local` file in the project root:
+   ```bash
+   # Payment Gateway Wallet Configuration
+   # Replace this with your actual Hoosat private key (64-character hex string) can be generated with genkeypair
+   MERCHANT_PRIVATE_KEY=33a4a81ecd31615c51385299969121707897fb1e167634196f31bd311de5fe43
 
-## Learn More
+   # Destination address for sweeping payment gateway funds after payment confirmation
+   MERCHANT_SWEEP_ADDRESS=hoosat:qzemxtcz54tvjcd5pwvh8d494997k762md4t8q9aw3kxjy4qjtmtsqtdlw3gh 
+   ```
 
-To learn more about Next.js, take a look at the following resources:
+3. **Run the development server:**
+   ```bash
+   npm run dev
+   ```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the merchant interface.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Usage
 
-## Deploy on Vercel
+1. Enter the payment amount in HTN (Hoosat tokens)
+2. Click "Generate Payment QR Code"
+3. Display the QR code to the buyer
+4. Buyer scans the QR code with their Hoosat wallet to complete the payment
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Built with
+
+- Next.js
+- TypeScript
+- Tailwind CSS
+- **Hoosat Web SDK** - Browser-compatible SDK for Hoosat blockchain integration.
+- **Hoosat SDK** - Node-compatible SDK for Hoosat blockchain integration.
