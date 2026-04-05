@@ -4,6 +4,10 @@ import { useEffect } from "react";
 
 export default function PwaRegister() {
     useEffect(() => {
+        if (process.env.NODE_ENV !== "production") {
+            return;
+        }
+
         if (!("serviceWorker" in navigator)) {
             return;
         }
@@ -12,7 +16,7 @@ export default function PwaRegister() {
             window.location.hostname === "localhost" ||
             window.location.hostname === "127.0.0.1";
 
-        if (!isLocal && window.location.protocol !== "https:") {
+        if (window.location.protocol !== "https:") {
             return;
         }
 

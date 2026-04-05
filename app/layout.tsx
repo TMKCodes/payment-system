@@ -17,6 +17,12 @@ export const metadata: Metadata = {
   title: "HTN Payment Gateway",
   description: "Installable Hoosat payment gateway for mobile checkout and confirmation.",
   applicationName: "HTN Gateway",
+  manifest: "/manifest.webmanifest",
+  icons: {
+    icon: "/icon.svg",
+    apple: "/apple-icon.svg",
+    shortcut: "/favicon.ico",
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
