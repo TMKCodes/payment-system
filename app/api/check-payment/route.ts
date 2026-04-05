@@ -30,10 +30,13 @@ type ObservedPendingPayment = {
     amountHtn: string;
 };
 
+const sdkNodePort = Number.parseInt(process.env.HOOSAT_NODE_PORT ?? '42420', 10);
+const sdkNodeTimeout = Number.parseInt(process.env.HOOSAT_NODE_TIMEOUT ?? '10000', 10);
+
 const SDK_NODE_CONFIG = {
-    host: 'mainnet-node-1.hoosat.fi',
-    port: 42420,
-    timeout: 10000,
+    host: process.env.HOOSAT_NODE_HOST ?? 'mainnet-node-1.hoosat.fi',
+    port: Number.isFinite(sdkNodePort) ? sdkNodePort : 42420,
+    timeout: Number.isFinite(sdkNodeTimeout) ? sdkNodeTimeout : 10000,
 };
 
 const SESSION_TTL_MS = 6 * 60 * 60 * 1000;

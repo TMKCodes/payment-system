@@ -26,7 +26,12 @@ A minimal HTN payment gateway for Hoosat cryptocurrency. Allows merchants to cre
    MERCHANT_PRIVATE_KEY=33a4a81ecd31615c51385299969121707897fb1e167634196f31bd311de5fe43
 
    # Destination address for sweeping payment gateway funds after payment confirmation
-   MERCHANT_SWEEP_ADDRESS=hoosat:qzemxtcz54tvjcd5pwvh8d494997k762md4t8q9aw3kxjy4qjtmtsqtdlw3gh 
+   MERCHANT_SWEEP_ADDRESS=hoosat:qzemxtcz54tvjcd5pwvh8d494997k762md4t8q9aw3kxjy4qjtmtsqtdlw3gh
+
+   # Hoosat SDK node configuration
+   HOOSAT_NODE_HOST=mainnet-node-1.hoosat.fi
+   HOOSAT_NODE_PORT=42420
+   HOOSAT_NODE_TIMEOUT=10000 
    ```
 
 3. **Run the development server:**
