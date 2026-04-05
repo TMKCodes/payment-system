@@ -9,6 +9,7 @@ A minimal HTN payment gateway for Hoosat cryptocurrency. Allows merchants to cre
 - **Real payment confirmation checking** via Hoosat blockchain using the official Hoosat SDK
 - **Seperate payment gateway** - all payments go to your configured payment gateway wallet
 - Automatic payment confirmation when funds are received and sweeped upwards to merchant bigger wallet
+- Installable PWA shell for mobile devices with cached client assets
 
 ## Setup
 
