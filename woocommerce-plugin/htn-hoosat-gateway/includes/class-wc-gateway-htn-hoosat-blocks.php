@@ -26,7 +26,7 @@ final class WC_Gateway_HTN_Hoosat_Blocks extends WC_Gateway_HTN_Hoosat_Blocks_Ba
     protected $name = 'htn_hoosat';
 
     /** @var array<string, mixed> */
-    private $settings = [];
+    protected $settings = [];
 
     /** @var WC_Gateway_HTN_Hoosat|null */
     private $gateway = null;
