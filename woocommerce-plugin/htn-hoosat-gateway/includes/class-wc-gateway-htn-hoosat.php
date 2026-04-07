@@ -463,6 +463,8 @@ class WC_Gateway_HTN_Hoosat extends WC_Payment_Gateway {
 
         $orderId = isset($_GET['order_id']) ? (int) $_GET['order_id'] : 0;
         $orderKey = isset($_GET['key']) ? (string) $_GET['key'] : '';
+        $paymentSessionId = isset($_GET['htn_session']) ? (string) $_GET['htn_session'] : '';
+        $returnStatus = isset($_GET['htn_status']) ? strtolower(trim((string) $_GET['htn_status'])) : '';
 
         if ($orderId <= 0 || $orderKey === '') {
             wc_add_notice('Invalid return parameters', 'error');
@@ -480,6 +482,22 @@ class WC_Gateway_HTN_Hoosat extends WC_Payment_Gateway {
         if ($order->get_order_key() !== $orderKey) {
             wc_add_notice('Invalid order key', 'error');
             wp_safe_redirect(wc_get_checkout_url());
+            exit;
+        }
+
+        if ($paymentSessionId !== '') {
+            $storedSessionId = (string) $order->get_meta('_htn_payment_session_id', true);
+            if ($storedSessionId !== '' && $storedSessionId !== $paymentSessionId) {
+                wc_add_notice('Payment session mismatch', 'error');
+                wp_safe_redirect($order->get_checkout_payment_url());
+                exit;
+            }
+        }
+
+        if ($returnStatus === 'cancel' || $returnStatus === 'cancelled') {
+            $order->add_order_note('Buyer cancelled HTN payment on hosted gateway page.');
+            wc_add_notice('HTN payment was cancelled. You can try again.', 'notice');
+            wp_safe_redirect($order->get_checkout_payment_url());
             exit;
         }
 
