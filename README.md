@@ -58,6 +58,39 @@ A minimal HTN payment gateway for Hoosat cryptocurrency. Allows merchants to cre
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the merchant interface.
 
+## Docker
+
+This repo includes a production Dockerfile for the hosted Next.js payment gateway.
+
+## Copy dockerfile to root project
+
+```bash
+cp docker/Dockerfile Dockerfile
+```
+
+### Build the image
+
+```bash
+docker build -t htn-payment-gateway .
+```
+
+### Run the container
+
+```bash
+docker run --rm -p 3000:3000 \
+   -e GATEWAY_WALLET_PRIVATE_KEY=replace-me \
+   -e MERCHANT_SWEEP_ADDRESS=hoosat:replace-me \
+   -e HOOSAT_NODE_HOST=mainnet-node-1.hoosat.fi \
+   -e HOOSAT_NODE_PORT=42420 \
+   -e HOOSAT_NODE_TIMEOUT=10000 \
+   -e LIVE_RATE_ADJUST_PERCENT=0 \
+   -e WOOCOMMERCE_SHARED_SECRET=replace-me \
+   -e WOOCOMMERCE_ALLOWED_ORIGINS=https://shop.example.com \
+   htn-payment-gateway
+```
+
+The container listens on port `3000` and runs the standalone Next.js server with `HOSTNAME=0.0.0.0`.
+
 ## Usage
 
 1. Enter the payment amount in HTN, or switch "Price in" to USD/EUR
@@ -86,6 +119,8 @@ WOOCOMMERCE_SHARED_SECRET=replace-with-a-long-random-string
 # WOOCOMMERCE_ALLOWED_ORIGINS=https://shop.example.com,https://staging-shop.example.com
 WOOCOMMERCE_ALLOWED_ORIGINS=https://shop.example.com
 ```
+
+For Docker deployments, pass these values with `docker run -e ...` or via an env file.
 
 ### Install the WooCommerce plugin
 

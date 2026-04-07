@@ -2,6 +2,7 @@ import type { NextConfig } from "next";
 import webpack from 'webpack';
 
 const nextConfig: NextConfig = {
+  output: 'standalone',
   webpack: (config) => {
     config.resolve.fallback = {
       ...config.resolve.fallback,
