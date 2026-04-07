@@ -77,19 +77,19 @@ docker build -t htn-payment-gateway .
 ### Run the container
 
 ```bash
-docker run --rm -p 3000:3000 \
-   -e GATEWAY_WALLET_PRIVATE_KEY=replace-me \
-   -e MERCHANT_SWEEP_ADDRESS=hoosat:replace-me \
+docker run --rm -p 5645:5645 \
+   -e GATEWAY_WALLET_PRIVATE_KEY=replace-m \
+   -e MERCHANT_SWEEP_ADDRESS=hoosat:replace-mgh \
    -e HOOSAT_NODE_HOST=mainnet-node-1.hoosat.fi \
    -e HOOSAT_NODE_PORT=42420 \
    -e HOOSAT_NODE_TIMEOUT=10000 \
    -e LIVE_RATE_ADJUST_PERCENT=0 \
-   -e WOOCOMMERCE_SHARED_SECRET=replace-me \
-   -e WOOCOMMERCE_ALLOWED_ORIGINS=https://shop.example.com \
+   -e WOOCOMMERCE_SHARED_SECRET=replace-m \
+   -e WOOCOMMERCE_ALLOWED_ORIGINS=https://shop.replace-me.com \
    htn-payment-gateway
 ```
 
-The container listens on port `3000` and runs the standalone Next.js server with `HOSTNAME=0.0.0.0`.
+The container listens on port `5645` and runs the standalone Next.js server with `HOSTNAME=0.0.0.0`.
 
 ## Usage
 

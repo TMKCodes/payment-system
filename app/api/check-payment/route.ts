@@ -36,7 +36,7 @@ const sdkNodeTimeout = Number.parseInt(process.env.HOOSAT_NODE_TIMEOUT ?? "10000
 const SDK_NODE_CONFIG = {
   host: process.env.HOOSAT_NODE_HOST ?? "mainnet-node-1.hoosat.fi",
   port: Number.isFinite(sdkNodePort) ? sdkNodePort : 42420,
-  timeout: Number.isFinite(sdkNodeTimeout) ? sdkNodeTimeout : 10000,
+  timeout: Number.isFinite(sdkNodeTimeout) ? sdkNodeTimeout : 60000,
 };
 
 const SESSION_TTL_MS = 6 * 60 * 60 * 1000;
@@ -342,16 +342,16 @@ export async function POST(request: NextRequest) {
       existingSession && existingSession.address === address && existingSession.amountSompi === expectedAmountSompi
         ? existingSession
         : {
-            address,
-            amountSompi: expectedAmountSompi,
-            knownConfirmedTxIds: new Set<string>(),
-            knownPendingTxIds: new Set<string>(),
-            trackedCandidatePayments: new Map<string, ObservedPendingPayment>(),
-            completedPayment: null,
-            sweepTransactionHash: null,
-            createdAt: now,
-            updatedAt: now,
-          };
+          address,
+          amountSompi: expectedAmountSompi,
+          knownConfirmedTxIds: new Set<string>(),
+          knownPendingTxIds: new Set<string>(),
+          trackedCandidatePayments: new Map<string, ObservedPendingPayment>(),
+          completedPayment: null,
+          sweepTransactionHash: null,
+          createdAt: now,
+          updatedAt: now,
+        };
 
     const maybeSubmitSweepTransaction = async () => {
       if (!session.completedPayment) {
