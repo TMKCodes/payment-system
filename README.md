@@ -77,10 +77,10 @@ docker build -t htn-payment-gateway .
 ### Run the container
 
 ```bash
-docker run --rm -p 5645:5645 \
+docker run --rm --network host \
    -e GATEWAY_WALLET_PRIVATE_KEY=replace-m \
    -e MERCHANT_SWEEP_ADDRESS=hoosat:replace-mgh \
-   -e HOOSAT_NODE_HOST=mainnet-node-1.hoosat.fi \
+   -e HOOSAT_NODE_HOST=127.0.0.1 \
    -e HOOSAT_NODE_PORT=42420 \
    -e HOOSAT_NODE_TIMEOUT=10000 \
    -e LIVE_RATE_ADJUST_PERCENT=0 \
