@@ -19,6 +19,18 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
 
 export async function GET() {
   try {
+    const adjustmentPercentRaw = process.env.LIVE_RATE_ADJUST_PERCENT ?? "0";
+    const adjustmentPercent = Number.parseFloat(adjustmentPercentRaw);
+    const adjustmentMultiplier = Number.isFinite(adjustmentPercent) ? 1 + adjustmentPercent / 100 : NaN;
+
+    if (!Number.isFinite(adjustmentMultiplier)) {
+      throw new Error("Invalid LIVE_RATE_ADJUST_PERCENT; expected a number");
+    }
+
+    if (adjustmentMultiplier <= 0) {
+      throw new Error("Invalid LIVE_RATE_ADJUST_PERCENT; results in non-positive multiplier");
+    }
+
     const [hoosat, fx] = await Promise.all([
       fetchJson<HoosatPriceResponse>("https://api.network.hoosat.fi/info/price?stringOnly=false", {
         headers: { accept: "application/json" },
@@ -45,13 +57,15 @@ export async function GET() {
       throw new Error("Invalid FX rate response");
     }
 
-    const eurPerHtn = usdPerHtn * usdToEur;
+    const adjustedUsdPerHtn = usdPerHtn * adjustmentMultiplier;
+    const eurPerHtn = adjustedUsdPerHtn * usdToEur;
 
     return NextResponse.json(
       {
-        usdPerHtn,
+        usdPerHtn: adjustedUsdPerHtn,
         eurPerHtn,
         usdToEur,
+        liveRateAdjustmentPercent: adjustmentPercent,
         updatedAt: new Date().toISOString(),
         sources: {
           hoosat: "https://api.network.hoosat.fi/info/price?stringOnly=false",

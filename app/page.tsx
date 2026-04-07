@@ -54,6 +54,7 @@ export default function Home() {
   const [amount, setAmount] = useState("");
   const [priceInputMode, setPriceInputMode] = useState<PriceInputMode>("HTN");
   const [liveRateUpdatedAt, setLiveRateUpdatedAt] = useState<string | null>(null);
+  const [liveRateAdjustmentPercent, setLiveRateAdjustmentPercent] = useState<number | null>(null);
   const [liveRateError, setLiveRateError] = useState<string>("");
   const [isFetchingLiveRate, setIsFetchingLiveRate] = useState(false);
 
@@ -97,6 +98,7 @@ export default function Home() {
       const data = (await response.json()) as {
         usdPerHtn: number;
         eurPerHtn: number;
+        liveRateAdjustmentPercent?: number;
         updatedAt?: string;
       };
 
@@ -111,6 +113,11 @@ export default function Home() {
       setUsdPerHtnRate(String(data.usdPerHtn));
       setEurPerHtnRate(String(data.eurPerHtn));
       setLiveRateUpdatedAt(typeof data.updatedAt === "string" ? data.updatedAt : null);
+      setLiveRateAdjustmentPercent(
+        typeof data.liveRateAdjustmentPercent === "number" && Number.isFinite(data.liveRateAdjustmentPercent)
+          ? data.liveRateAdjustmentPercent
+          : null,
+      );
     } catch (error) {
       console.error("Error fetching live rates:", error);
       setLiveRateError((error as Error).message ?? "Failed to fetch live rates");
@@ -381,6 +388,13 @@ export default function Home() {
 
                 {liveRateUpdatedAt && (
                   <p className="mt-2 text-xs text-gray-500">Updated: {new Date(liveRateUpdatedAt).toLocaleString()}</p>
+                )}
+
+                {liveRateAdjustmentPercent != null && (
+                  <p className="mt-1 text-xs text-gray-500">
+                    Live adjustment: {liveRateAdjustmentPercent > 0 ? "+" : ""}
+                    {liveRateAdjustmentPercent}%
+                  </p>
                 )}
 
                 {liveRateError && <p className="mt-2 text-xs text-red-600">Live rate error: {liveRateError}</p>}

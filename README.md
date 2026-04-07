@@ -41,6 +41,11 @@ A minimal HTN payment gateway for Hoosat cryptocurrency. Allows merchants to cre
    NEXT_PUBLIC_USD_PER_HTN=0.12
    NEXT_PUBLIC_EUR_PER_HTN=0.11
 
+   # (Optional) Automatically adjust fetched live rates by a percentage
+   # Example: 2.5 increases USD/HTN and EUR/HTN by 2.5%
+   # Example: -1 applies a 1% discount
+   LIVE_RATE_ADJUST_PERCENT=0
+
    # Legacy (supported): previous direction ("HTN per USD/EUR")
    # NEXT_PUBLIC_USD_TO_HTN_RATE=12.5
    # NEXT_PUBLIC_EUR_TO_HTN_RATE=13.1
@@ -57,6 +62,7 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 1. Enter the payment amount in HTN, or switch "Price in" to USD/EUR
 2. (USD/EUR) The app loads the live USD/HTN rate automatically from `https://api.network.hoosat.fi/info/price?stringOnly=false`
+   - The server applies `LIVE_RATE_ADJUST_PERCENT` (if set) to the live rate before showing it
 3. (EUR) EUR/HTN is derived from USD/HTN using a USD→EUR FX rate
 4. Optionally edit the conversion rate manually, or click "Refresh live rate"
 5. Click "Generate Payment QR Code"
