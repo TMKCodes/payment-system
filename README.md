@@ -9,17 +9,20 @@ A minimal HTN payment gateway for Hoosat cryptocurrency. Allows merchants to cre
 - **Real payment confirmation checking** via Hoosat blockchain using the official Hoosat SDK
 - **Seperate payment gateway** - all payments go to your configured payment gateway wallet
 - Automatic payment confirmation when funds are received and sweeped upwards to merchants configured wallet
+- Live fiat pricing (USD/HTN from Hoosat network API; EUR/HTN derived via USD→EUR FX rate)
 
 ## Setup
 
 1. **Install dependencies:**
+
    ```bash
    npm install
    ```
 
 2. **Configure merchant wallet:**
-   
+
    Create a `.env.local` file in the project root:
+
    ```bash
    # Payment Gateway Wallet Configuration
    # Replace this with your actual Hoosat private key (64-character hex string) can be generated with genkeypair
@@ -31,7 +34,16 @@ A minimal HTN payment gateway for Hoosat cryptocurrency. Allows merchants to cre
    # Hoosat SDK node configuration
    HOOSAT_NODE_HOST=mainnet-node-1.hoosat.fi
    HOOSAT_NODE_PORT=42420
-   HOOSAT_NODE_TIMEOUT=10000 
+   HOOSAT_NODE_TIMEOUT=10000
+
+   # (Optional) Default conversion rates when pricing in USD or EUR
+   # UI expects "USD per HTN" and "EUR per HTN" (examples only)
+   NEXT_PUBLIC_USD_PER_HTN=0.12
+   NEXT_PUBLIC_EUR_PER_HTN=0.11
+
+   # Legacy (supported): previous direction ("HTN per USD/EUR")
+   # NEXT_PUBLIC_USD_TO_HTN_RATE=12.5
+   # NEXT_PUBLIC_EUR_TO_HTN_RATE=13.1
    ```
 
 3. **Run the development server:**
@@ -43,11 +55,13 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 ## Usage
 
-1. Enter the payment amount in HTN (Hoosat tokens)
-2. Click "Generate Payment QR Code"
-3. Display the QR code to the buyer
-4. Buyer scans the QR code with their Hoosat wallet to complete the payment
-
+1. Enter the payment amount in HTN, or switch "Price in" to USD/EUR
+2. (USD/EUR) The app loads the live USD/HTN rate automatically from `https://api.network.hoosat.fi/info/price?stringOnly=false`
+3. (EUR) EUR/HTN is derived from USD/HTN using a USD→EUR FX rate
+4. Optionally edit the conversion rate manually, or click "Refresh live rate"
+5. Click "Generate Payment QR Code"
+6. Display the QR code to the buyer
+7. Buyer scans the QR code with their Hoosat wallet to complete the payment
 
 ## Built with
 
