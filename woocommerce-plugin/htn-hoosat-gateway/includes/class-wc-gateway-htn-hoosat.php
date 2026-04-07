@@ -379,6 +379,14 @@ class WC_Gateway_HTN_Hoosat extends WC_Payment_Gateway {
     }
 
     private static function get_gateway_instance(): ?self {
+        if (class_exists(self::class)) {
+            try {
+                return new self();
+            } catch (Exception $e) {
+                // Fall through to the runtime registry lookup below.
+            }
+        }
+
         if (!function_exists('WC')) {
             return null;
         }
