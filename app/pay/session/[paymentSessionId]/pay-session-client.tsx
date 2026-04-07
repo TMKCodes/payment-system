@@ -233,7 +233,7 @@ export default function PaySessionClient(props: {
   }, [paymentSessionId]);
 
   useEffect(() => {
-    if (!merchantAddress || !qrCodeDataUrl || !amountHtn) return;
+    if (!merchantAddress || !qrCodeDataUrl || !amountHtn || isComplete) return;
 
     const intervalId = window.setInterval(() => {
       void poll(true);
@@ -241,7 +241,7 @@ export default function PaySessionClient(props: {
 
     return () => window.clearInterval(intervalId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [merchantAddress, qrCodeDataUrl, amountHtn, paymentSessionId]);
+  }, [merchantAddress, qrCodeDataUrl, amountHtn, paymentSessionId, isComplete]);
 
   useEffect(() => {
     if (!isComplete) return;
@@ -254,9 +254,10 @@ export default function PaySessionClient(props: {
 
       await notifyWooCommerce();
 
-      const url = buildReturnUrl("paid");
-      if (url && canRedirect) {
-        window.location.assign(url);
+      if (canRedirect) {
+        setStatusText("Payment confirmed. Click continue to return to store.");
+      } else {
+        setStatusText("Payment confirmed. You can close this window.");
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -306,19 +307,33 @@ export default function PaySessionClient(props: {
             type="button"
             onClick={() => void poll(false)}
             className="text-sm px-3 py-2 rounded border border-gray-300 bg-white hover:bg-gray-50"
+            disabled={isComplete}
           >
             Refresh
           </button>
-          <button
-            type="button"
-            onClick={() => {
-              if (canRedirect) redirectToReturnUrl("cancel");
-            }}
-            className="text-sm px-3 py-2 rounded border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-60"
-            disabled={!canRedirect}
-          >
-            Cancel
-          </button>
+          {isComplete ? (
+            <button
+              type="button"
+              onClick={() => {
+                if (canRedirect) redirectToReturnUrl("paid");
+              }}
+              className="text-sm px-3 py-2 rounded border border-green-700 bg-green-700 text-white hover:bg-green-800 disabled:opacity-60"
+              disabled={!canRedirect}
+            >
+              Continue
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                if (canRedirect) redirectToReturnUrl("cancel");
+              }}
+              className="text-sm px-3 py-2 rounded border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-60"
+              disabled={!canRedirect}
+            >
+              Cancel
+            </button>
+          )}
         </div>
 
         {!canRedirect && returnUrl ? (
