@@ -272,18 +272,24 @@ class WC_Gateway_HTN_Hoosat extends WC_Payment_Gateway {
         return $data['address'];
     }
 
-    private function check_payment_status(string $address, string $amountHtn, string $sessionId): array {
+    private function check_payment_status(string $address, string $amountHtn, string $sessionId, ?string $action = null): array {
+        $payload = [
+            'address' => $address,
+            'amount' => $amountHtn,
+            'sessionId' => $sessionId,
+        ];
+
+        if (is_string($action) && $action !== '') {
+            $payload['action'] = $action;
+        }
+
         return $this->fetch_gateway_json('/api/check-payment', [
             'method' => 'POST',
             'headers' => [
                 'Accept' => 'application/json',
                 'Content-Type' => 'application/json',
             ],
-            'body' => wp_json_encode([
-                'address' => $address,
-                'amount' => $amountHtn,
-                'sessionId' => $sessionId,
-            ]),
+            'body' => wp_json_encode($payload),
         ]);
     }
 
@@ -296,6 +302,8 @@ class WC_Gateway_HTN_Hoosat extends WC_Payment_Gateway {
         }
 
         $address = $this->fetch_merchant_address();
+
+        // First verify the payment is complete.
         $status = $this->check_payment_status($address, $amountHtn, $sessionId);
 
         if (!isset($status['paymentStatus'])) {
@@ -304,6 +312,22 @@ class WC_Gateway_HTN_Hoosat extends WC_Payment_Gateway {
 
         if ($status['paymentStatus'] !== 'completed') {
             return false;
+        }
+
+        // Attempt an automatic sweep to the merchant sweep address.
+        // This is best-effort: sweep failures should not block order completion.
+        try {
+            $sweepStatus = $this->check_payment_status($address, $amountHtn, $sessionId, 'confirm-transaction');
+
+            if (
+                isset($sweepStatus['paymentDetails']['sweepTransactionHash']) &&
+                is_string($sweepStatus['paymentDetails']['sweepTransactionHash']) &&
+                $sweepStatus['paymentDetails']['sweepTransactionHash'] !== ''
+            ) {
+                $order->update_meta_data('_htn_sweep_transaction_hash', (string) $sweepStatus['paymentDetails']['sweepTransactionHash']);
+            }
+        } catch (Exception $e) {
+            $this->log('Sweep attempt failed (non-blocking)', ['error' => $e->getMessage()]);
         }
 
         $txid = '';
