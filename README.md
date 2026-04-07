@@ -26,7 +26,7 @@ A minimal HTN payment gateway for Hoosat cryptocurrency. Allows merchants to cre
    ```bash
    # Payment Gateway Wallet Configuration
    # Replace this with your actual Hoosat private key (64-character hex string) can be generated with genkeypair
-   MERCHANT_PRIVATE_KEY=33a4a81ecd31615c51385299969121707897fb1e167634196f31bd311de5fe43
+   GATEWAY_WALLET_PRIVATE_KEY=33a4a81ecd31615c51385299969121707897fb1e167634196f31bd311de5fe43
 
    # Destination address for sweeping payment gateway funds after payment confirmation
    MERCHANT_SWEEP_ADDRESS=hoosat:qzemxtcz54tvjcd5pwvh8d494997k762md4t8q9aw3kxjy4qjtmtsqtdlw3gh
