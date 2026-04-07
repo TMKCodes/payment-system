@@ -69,6 +69,45 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 6. Display the QR code to the buyer
 7. Buyer scans the QR code with their Hoosat wallet to complete the payment
 
+## WooCommerce integration
+
+This repo includes a WooCommerce payment gateway plugin that redirects the customer to a hosted payment page on this gateway.
+
+### Gateway configuration
+
+Add these variables to `.env.local` (or your deployment environment):
+
+```bash
+# Used by the gateway to sign WooCommerce callbacks
+WOOCOMMERCE_SHARED_SECRET=replace-with-a-long-random-string
+
+# Comma-separated list of allowed WooCommerce site origins for callback/return URLs
+# Example:
+# WOOCOMMERCE_ALLOWED_ORIGINS=https://shop.example.com,https://staging-shop.example.com
+WOOCOMMERCE_ALLOWED_ORIGINS=https://shop.example.com
+```
+
+### Install the WooCommerce plugin
+
+- Plugin source: [woocommerce-plugin/htn-hoosat-gateway](woocommerce-plugin/htn-hoosat-gateway)
+- Zip the folder and upload it in WordPress: **Plugins → Add New → Upload Plugin**
+
+### Configure WooCommerce
+
+1. WooCommerce → Settings → Payments → **HTN (Hoosat)**
+2. Set:
+   - **Gateway Base URL**: your deployed Next.js gateway (e.g. `https://gateway.example.com`)
+   - **Pricing Mode**: `USD`, `EUR`, or `HTN` (for `USD`/`EUR`, your WooCommerce store currency must match)
+   - **Shared Secret**: must match `WOOCOMMERCE_SHARED_SECRET`
+
+### Flow (what happens)
+
+- Checkout calls the plugin, which creates a gateway `sessionId` and redirects the buyer to:
+  - `/pay/session/<sessionId>?amount=<htn>&order_id=...&order_key=...`
+- The hosted page shows a QR code and polls `/api/check-payment` until the payment is confirmed.
+- On confirmation, the gateway POSTs a signed callback to the shop and redirects the buyer back to WooCommerce.
+- WooCommerce verifies the payment with the gateway and then triggers a **best-effort automatic sweep** by calling `/api/check-payment` with `action: "confirm-transaction"`.
+
 ## Built with
 
 - Next.js
