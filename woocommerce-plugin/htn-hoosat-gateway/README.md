@@ -2,6 +2,8 @@
 
 This plugin adds a **Hoosat (HTN)** payment method to WooCommerce and redirects customers to a hosted payment page on your HTN gateway.
 
+It supports both the classic WooCommerce checkout and the Cart/Checkout Blocks checkout.
+
 ## Install
 
 1. Zip the folder `htn-hoosat-gateway/`.
@@ -17,6 +19,15 @@ WooCommerce → Settings → Payments → **HTN (Hoosat)**
   - `USD` or `EUR`: converts the order total to HTN using the gateway `/api/price` rate (store currency must match)
   - `HTN`: treats the order total as already being HTN
 - **Shared Secret**: must match `WOOCOMMERCE_SHARED_SECRET` on the gateway
+
+If the gateway is enabled in admin but missing at checkout, the most common causes are:
+
+- the checkout page is using WooCommerce Blocks and the plugin version does not include Blocks support
+- **Gateway Base URL** is empty
+- **Shared Secret** is empty
+- **Pricing Mode** is `USD` or `EUR`, but the WooCommerce store currency does not match
+
+Enable **Debug Log** to record availability failures in WooCommerce → Status → Logs under `htn-hoosat-gateway`.
 
 ## How orders are completed
 

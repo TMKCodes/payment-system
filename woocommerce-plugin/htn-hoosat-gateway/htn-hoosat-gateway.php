@@ -36,4 +36,21 @@ add_action('plugins_loaded', function () {
     // REST-like callbacks via WC API (/?wc-api=...).
     add_action('woocommerce_api_htn_gateway_callback', ['WC_Gateway_HTN_Hoosat', 'handle_callback']);
     add_action('woocommerce_api_htn_gateway_return', ['WC_Gateway_HTN_Hoosat', 'handle_return']);
+
+    // Register a Cart/Checkout Blocks integration when WooCommerce Blocks is available.
+    add_action('woocommerce_blocks_loaded', function () {
+        require_once __DIR__ . '/includes/class-wc-gateway-htn-hoosat-blocks.php';
+
+        add_action('woocommerce_blocks_payment_method_type_registration', function ($payment_method_registry) {
+            if (!class_exists('WC_Gateway_HTN_Hoosat_Blocks')) {
+                return;
+            }
+
+            if (!is_object($payment_method_registry) || !method_exists($payment_method_registry, 'register')) {
+                return;
+            }
+
+            $payment_method_registry->register(new WC_Gateway_HTN_Hoosat_Blocks());
+        });
+    });
 });

@@ -92,6 +92,11 @@ class WC_Gateway_HTN_Hoosat extends WC_Payment_Gateway {
         $logger->info($message . (!empty($context) ? ' ' . wp_json_encode($context) : ''), ['source' => 'htn-hoosat-gateway']);
     }
 
+    private function unavailable(string $reason, array $context = []): bool {
+        $this->log('Gateway unavailable: ' . $reason, $context);
+        return false;
+    }
+
     private function gateway_base_url(): string {
         $raw = (string) $this->get_option('gateway_url', '');
         $raw = trim($raw);
@@ -110,17 +115,17 @@ class WC_Gateway_HTN_Hoosat extends WC_Payment_Gateway {
 
     public function is_available(): bool {
         if (!parent::is_available()) {
-            return false;
+            return $this->unavailable('parent gateway availability check failed');
         }
 
         $gatewayUrl = $this->gateway_base_url();
         if ($gatewayUrl === '') {
-            return false;
+            return $this->unavailable('missing gateway base URL');
         }
 
         $secret = $this->shared_secret();
         if ($secret === '') {
-            return false;
+            return $this->unavailable('missing shared secret');
         }
 
         // If using USD/EUR conversion, the store currency should match.
@@ -128,7 +133,10 @@ class WC_Gateway_HTN_Hoosat extends WC_Payment_Gateway {
         if ($mode !== 'HTN') {
             $currency = get_woocommerce_currency();
             if (strtoupper($currency) !== $mode) {
-                return false;
+                return $this->unavailable('store currency does not match pricing mode', [
+                    'store_currency' => strtoupper($currency),
+                    'pricing_mode' => $mode,
+                ]);
             }
         }
 
