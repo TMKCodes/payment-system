@@ -58,6 +58,88 @@ A minimal HTN payment gateway for Hoosat cryptocurrency. Allows merchants to cre
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the merchant interface.
 
+## Shopify integration (self-hosted gateway)
+
+This repo can also act as a self-hosted crypto gateway for Shopify by using a **manual payment method** that sends customers to a hosted payment page on this app.
+
+### What you get
+
+- A hosted payment page at `/pay/<orderId>?shop=<shop-domain>` that shows a Hoosat QR for the exact order total (USD/EUR → HTN using live rates).
+- Automatic on-chain polling (via `/api/check-payment`) and a button/auto-attempt to mark the Shopify order as paid once confirmed.
+
+### Shopify prerequisites
+
+- Shopify Partner account
+- A Shopify App (custom app or public app) with Admin API access
+- A public URL for your gateway (use a tunnel like `cloudflared` or `ngrok` in dev)
+
+### Environment variables
+
+Add these to `.env.local`:
+
+```bash
+# Required for Shopify OAuth install flow
+SHOPIFY_API_KEY=...
+SHOPIFY_API_SECRET=...
+
+# Public base URL of this app (must match Shopify redirect URLs)
+# Example (dev tunnel): https://your-subdomain.ngrok.app
+SHOPIFY_APP_URL=https://your-gateway.example
+
+# Optional: scopes used during install
+SHOPIFY_SCOPES=read_orders,write_orders
+
+# Optional: Shopify API version (defaults in code)
+SHOPIFY_API_VERSION=2025-01
+
+# "Single-shop" mode (no OAuth) - useful for local self-run demos
+# If set, the app can access your store without installing via /api/shopify/install
+SHOPIFY_SHOP_DOMAIN=your-store.myshopify.com
+SHOPIFY_ADMIN_ACCESS_TOKEN=shpat_...
+```
+
+### Install (OAuth) flow
+
+1. Create an app in Shopify Partners.
+2. Set the app URL to `SHOPIFY_APP_URL`.
+3. Add redirect URL:
+   - `${SHOPIFY_APP_URL}/api/shopify/callback`
+4. Start install:
+   - `GET /api/shopify/install?shop=your-store.myshopify.com`
+
+Tokens are stored locally in `.data/shopify-tokens.json` for development.
+
+### Configure Shopify to use HTN as a manual payment method
+
+In your Shopify admin:
+
+1. Go to **Settings → Payments**.
+2. In **Manual payment methods**, add a new method (e.g. "HTN Crypto").
+3. In the instructions, include a link to the hosted payment page:
+
+```
+Pay your order with HTN here:
+https://YOUR_GATEWAY_HOST/pay/{{ order.id }}?shop=YOUR_SHOP_DOMAIN
+```
+
+Notes:
+
+- `{{ order.id }}` is the numeric Shopify order id.
+- `YOUR_SHOP_DOMAIN` is usually `your-store.myshopify.com`.
+
+### End-to-end customer flow
+
+1. Customer checks out and chooses the manual method ("HTN Crypto").
+2. Customer clicks the payment link and pays via QR.
+3. The page polls the Hoosat chain; when confirmed it calls `/api/shopify/mark-paid` to mark the order paid.
+
+### Key endpoints
+
+- `GET /api/shopify/order-payment?shop=...&orderId=...` (builds the HTN amount + initializes the payment session)
+- `POST /api/check-payment` (polls on-chain state)
+- `POST /api/shopify/mark-paid` (marks the order paid when the on-chain payment is complete)
+- `GET /pay/<orderId>?shop=...` (hosted customer payment page)
+
 ## Usage
 
 1. Enter the payment amount in HTN, or switch "Price in" to USD/EUR
