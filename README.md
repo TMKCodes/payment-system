@@ -9,7 +9,7 @@ A minimal HTN payment gateway for Hoosat cryptocurrency. Allows merchants to cre
 - **Real payment confirmation checking** via Hoosat blockchain using the official Hoosat SDK
 - **Seperate payment gateway** - all payments go to your configured payment gateway wallet
 - Automatic payment confirmation when funds are received and sweeped upwards to merchants configured wallet
-- Live fiat pricing (USD/HTN from Hoosat network API; EUR/HTN derived via USD→EUR FX rate)
+- Live fiat pricing (USD/HTN from Hoosat network API; EUR/HTN plus supported-currency conversions derived from USD/EUR FX rates)
 
 ## Setup
 
@@ -97,10 +97,12 @@ The container listens on port `5645` and runs the standalone Next.js server with
 2. (USD/EUR) The app loads the live USD/HTN rate automatically from `https://api.network.hoosat.fi/info/price?stringOnly=false`
    - The server applies `LIVE_RATE_ADJUST_PERCENT` (if set) to the live rate before showing it
 3. (EUR) EUR/HTN is derived from USD/HTN using a USD→EUR FX rate
-4. Optionally edit the conversion rate manually, or click "Refresh live rate"
-5. Click "Generate Payment QR Code"
-6. Display the QR code to the buyer
-7. Buyer scans the QR code with their Hoosat wallet to complete the payment
+4. `/api/price` also returns filtered conversion data from `USD` and `EUR` to this fixed allowlist:
+   `AED, AFN, ALL, AMD, ANG, AOA, ARS, AUD, AWG, AZN, BAM, BBD, BDT, BIF, BMD, BND, BOB, BRL, BSD, BWP, BYN, BZD, CAD, CDF, CHF, CLP, CNY, COP, CRC, CVE, CZK, DJF, DKK, DOP, DZD, EGP, ETB, EUR, FJD, FKP, GBP, GEL, GIP, GMD, GNF, GTQ, GYD, HKD, HNL, HTG, HUF, IDR, ILS, INR, ISK, JMD, JPY, KES, KGS, KHR, KMF, KRW, KYD, KZT, LAK, LBP, LKR, LRD, LSL, MAD, MDL, MGA, MKD, MMK, MNT, MOP, MUR, MVR, MWK, MXN, MYR, MZN, NAD, NGN, NIO, NOK, NPR, NZD, PAB, PEN, PGK, PHP, PKR, PLN, PYG, QAR, RON, RSD, RUB, RWF, SAR, SBD, SCR, SEK, SGD, SHP, SLE, SOS, SRD, STD, SZL, THB, TJS, TOP, TRY, TTD, TWD, TZS, UAH, UGX, USD, UYU, UZS, VND, VUV, WST, XAF, XCD, XCG, XOF, XPF, YER, ZAR, ZMW`
+5. Optionally edit the conversion rate manually, or click "Refresh live rate"
+6. Click "Generate Payment QR Code"
+7. Display the QR code to the buyer
+8. Buyer scans the QR code with their Hoosat wallet to complete the payment
 
 ## WooCommerce integration
 

@@ -2,7 +2,164 @@
 
 import { useState, useEffect } from "react";
 
-type PriceInputMode = "HTN" | "USD" | "EUR";
+const SUPPORTED_FIAT_CURRENCIES = [
+  "USD",
+  "EUR",
+  "AED",
+  "AFN",
+  "ALL",
+  "AMD",
+  "ANG",
+  "AOA",
+  "ARS",
+  "AUD",
+  "AWG",
+  "AZN",
+  "BAM",
+  "BBD",
+  "BDT",
+  "BIF",
+  "BMD",
+  "BND",
+  "BOB",
+  "BRL",
+  "BSD",
+  "BWP",
+  "BYN",
+  "BZD",
+  "CAD",
+  "CDF",
+  "CHF",
+  "CLP",
+  "CNY",
+  "COP",
+  "CRC",
+  "CVE",
+  "CZK",
+  "DJF",
+  "DKK",
+  "DOP",
+  "DZD",
+  "EGP",
+  "ETB",
+  "FJD",
+  "FKP",
+  "GBP",
+  "GEL",
+  "GIP",
+  "GMD",
+  "GNF",
+  "GTQ",
+  "GYD",
+  "HKD",
+  "HNL",
+  "HTG",
+  "HUF",
+  "IDR",
+  "ILS",
+  "INR",
+  "ISK",
+  "JMD",
+  "JPY",
+  "KES",
+  "KGS",
+  "KHR",
+  "KMF",
+  "KRW",
+  "KYD",
+  "KZT",
+  "LAK",
+  "LBP",
+  "LKR",
+  "LRD",
+  "LSL",
+  "MAD",
+  "MDL",
+  "MGA",
+  "MKD",
+  "MMK",
+  "MNT",
+  "MOP",
+  "MUR",
+  "MVR",
+  "MWK",
+  "MXN",
+  "MYR",
+  "MZN",
+  "NAD",
+  "NGN",
+  "NIO",
+  "NOK",
+  "NPR",
+  "NZD",
+  "PAB",
+  "PEN",
+  "PGK",
+  "PHP",
+  "PKR",
+  "PLN",
+  "PYG",
+  "QAR",
+  "RON",
+  "RSD",
+  "RUB",
+  "RWF",
+  "SAR",
+  "SBD",
+  "SCR",
+  "SEK",
+  "SGD",
+  "SHP",
+  "SLE",
+  "SOS",
+  "SRD",
+  "STD",
+  "SZL",
+  "THB",
+  "TJS",
+  "TOP",
+  "TRY",
+  "TTD",
+  "TWD",
+  "TZS",
+  "UAH",
+  "UGX",
+  "UYU",
+  "UZS",
+  "VND",
+  "VUV",
+  "WST",
+  "XAF",
+  "XCD",
+  "XCG",
+  "XOF",
+  "XPF",
+  "YER",
+  "ZAR",
+  "ZMW",
+] as const;
+
+type SupportedFiatCurrency = (typeof SUPPORTED_FIAT_CURRENCIES)[number];
+type PriceInputMode = "HTN" | SupportedFiatCurrency;
+
+function getInitialFiatRates(): Record<SupportedFiatCurrency, string> {
+  return {
+    ...(Object.fromEntries(SUPPORTED_FIAT_CURRENCIES.map((currency) => [currency, ""])) as Record<
+      SupportedFiatCurrency,
+      string
+    >),
+    USD:
+      process.env.NEXT_PUBLIC_USD_PER_HTN ??
+      (process.env.NEXT_PUBLIC_USD_TO_HTN_RATE
+        ? (divideDecimalStrings("1", process.env.NEXT_PUBLIC_USD_TO_HTN_RATE, 8) ?? "")
+        : ""),
+    EUR:
+      process.env.NEXT_PUBLIC_EUR_PER_HTN ??
+      (process.env.NEXT_PUBLIC_EUR_TO_HTN_RATE
+        ? (divideDecimalStrings("1", process.env.NEXT_PUBLIC_EUR_TO_HTN_RATE, 8) ?? "")
+        : ""),
+  };
+}
 
 function parseDecimalToBigInt(value: string): { digits: bigint; scale: number } | null {
   const trimmed = value.trim();
@@ -53,23 +210,10 @@ function divideDecimalStrings(numerator: string, denominator: string, outScale: 
 export default function Home() {
   const [amount, setAmount] = useState("");
   const [priceInputMode, setPriceInputMode] = useState<PriceInputMode>("HTN");
-  const [liveRateUpdatedAt, setLiveRateUpdatedAt] = useState<string | null>(null);
-  const [liveRateAdjustmentPercent, setLiveRateAdjustmentPercent] = useState<number | null>(null);
   const [liveRateError, setLiveRateError] = useState<string>("");
   const [isFetchingLiveRate, setIsFetchingLiveRate] = useState(false);
 
-  const [usdPerHtnRate, setUsdPerHtnRate] = useState(
-    process.env.NEXT_PUBLIC_USD_PER_HTN ??
-      (process.env.NEXT_PUBLIC_USD_TO_HTN_RATE
-        ? (divideDecimalStrings("1", process.env.NEXT_PUBLIC_USD_TO_HTN_RATE, 8) ?? "")
-        : ""),
-  );
-  const [eurPerHtnRate, setEurPerHtnRate] = useState(
-    process.env.NEXT_PUBLIC_EUR_PER_HTN ??
-      (process.env.NEXT_PUBLIC_EUR_TO_HTN_RATE
-        ? (divideDecimalStrings("1", process.env.NEXT_PUBLIC_EUR_TO_HTN_RATE, 8) ?? "")
-        : ""),
-  );
+  const [fiatRates, setFiatRates] = useState<Record<SupportedFiatCurrency, string>>(getInitialFiatRates);
   const [qrCode, setQrCode] = useState("");
   const [paymentStatus, setPaymentStatus] = useState("");
   const [address, setAddress] = useState("");
@@ -79,9 +223,9 @@ export default function Home() {
   const [isSweepSubmitted, setIsSweepSubmitted] = useState(false);
   const [isClient, setIsClient] = useState(false);
 
-  const isFiatMode = priceInputMode === "USD" || priceInputMode === "EUR";
-  const fiatLabel = priceInputMode === "USD" ? "USD" : priceInputMode === "EUR" ? "EUR" : "HTN";
-  const selectedFiatRate = priceInputMode === "USD" ? usdPerHtnRate : priceInputMode === "EUR" ? eurPerHtnRate : "";
+  const isFiatMode = priceInputMode !== "HTN";
+  const fiatLabel = priceInputMode;
+  const selectedFiatRate = isFiatMode ? fiatRates[priceInputMode] : "";
 
   const amountHtn = priceInputMode === "HTN" ? amount : (divideDecimalStrings(amount, selectedFiatRate, 8) ?? "");
 
@@ -96,28 +240,21 @@ export default function Home() {
       }
 
       const data = (await response.json()) as {
-        usdPerHtn: number;
-        eurPerHtn: number;
-        liveRateAdjustmentPercent?: number;
-        updatedAt?: string;
+        pricesPerHtn?: Partial<Record<SupportedFiatCurrency, number>>;
       };
 
-      if (typeof data.usdPerHtn !== "number" || !Number.isFinite(data.usdPerHtn) || data.usdPerHtn <= 0) {
-        throw new Error("Invalid USD/HTN rate");
+      const nextRates = {} as Record<SupportedFiatCurrency, string>;
+
+      for (const currency of SUPPORTED_FIAT_CURRENCIES) {
+        const rate = data.pricesPerHtn?.[currency];
+        if (typeof rate !== "number" || !Number.isFinite(rate) || rate <= 0) {
+          throw new Error(`Invalid ${currency}/HTN rate`);
+        }
+
+        nextRates[currency] = String(rate);
       }
 
-      if (typeof data.eurPerHtn !== "number" || !Number.isFinite(data.eurPerHtn) || data.eurPerHtn <= 0) {
-        throw new Error("Invalid EUR/HTN rate");
-      }
-
-      setUsdPerHtnRate(String(data.usdPerHtn));
-      setEurPerHtnRate(String(data.eurPerHtn));
-      setLiveRateUpdatedAt(typeof data.updatedAt === "string" ? data.updatedAt : null);
-      setLiveRateAdjustmentPercent(
-        typeof data.liveRateAdjustmentPercent === "number" && Number.isFinite(data.liveRateAdjustmentPercent)
-          ? data.liveRateAdjustmentPercent
-          : null,
-      );
+      setFiatRates(nextRates);
     } catch (error) {
       console.error("Error fetching live rates:", error);
       setLiveRateError((error as Error).message ?? "Failed to fetch live rates");
@@ -345,8 +482,11 @@ export default function Home() {
                   className="p-2 border border-gray-300 rounded text-sm bg-white"
                 >
                   <option value="HTN">HTN</option>
-                  <option value="USD">USD</option>
-                  <option value="EUR">EUR</option>
+                  {SUPPORTED_FIAT_CURRENCIES.map((currency) => (
+                    <option key={currency} value={currency}>
+                      {currency}
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -378,24 +518,15 @@ export default function Home() {
                   value={selectedFiatRate}
                   onChange={(e) => {
                     const nextValue = e.target.value;
-                    if (priceInputMode === "USD") setUsdPerHtnRate(nextValue);
-                    if (priceInputMode === "EUR") setEurPerHtnRate(nextValue);
+                    setFiatRates((currentRates) => ({
+                      ...currentRates,
+                      [priceInputMode]: nextValue,
+                    }));
                   }}
                   className="w-full p-2 border border-gray-300 rounded"
                   placeholder="e.g. 0.12"
                   inputMode="decimal"
                 />
-
-                {liveRateUpdatedAt && (
-                  <p className="mt-2 text-xs text-gray-500">Updated: {new Date(liveRateUpdatedAt).toLocaleString()}</p>
-                )}
-
-                {liveRateAdjustmentPercent != null && (
-                  <p className="mt-1 text-xs text-gray-500">
-                    Live adjustment: {liveRateAdjustmentPercent > 0 ? "+" : ""}
-                    {liveRateAdjustmentPercent}%
-                  </p>
-                )}
 
                 {liveRateError && <p className="mt-2 text-xs text-red-600">Live rate error: {liveRateError}</p>}
                 <p className="mt-2 text-sm text-gray-700">

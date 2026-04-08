@@ -267,16 +267,16 @@ class WC_Gateway_HTN_Hoosat extends WC_Payment_Gateway {
                 'method' => 'GET',
             ]);
 
-            if ($mode === 'USD' && isset($price['usdPerHtn'])) {
-                $rate = (float) $price['usdPerHtn'];
+            if ($mode === 'USD' && isset($price['pricesPerHtn']['USD'])) {
+                $rate = (float) $price['pricesPerHtn']['USD'];
                 if ($rate <= 0) {
                     return null;
                 }
                 return $total / $rate;
             }
 
-            if ($mode === 'EUR' && isset($price['eurPerHtn'])) {
-                $rate = (float) $price['eurPerHtn'];
+            if ($mode === 'EUR' && isset($price['pricesPerHtn']['EUR'])) {
+                $rate = (float) $price['pricesPerHtn']['EUR'];
                 if ($rate <= 0) {
                     return null;
                 }
