@@ -563,15 +563,18 @@ class HTN_Gateway_For_WooCommerce_Gateway extends WC_Payment_Gateway {
             }
         }
 
-        if ($returnStatus === 'cancel' || $returnStatus === 'cancelled') {
-            $order->add_order_note('Buyer cancelled HTN payment on hosted gateway page.');
-            wc_add_notice('HTN payment was cancelled. You can try again.', 'notice');
-            wp_safe_redirect($order->get_checkout_payment_url());
+        if ($order->is_paid()) {
+            wp_safe_redirect($order->get_checkout_order_received_url());
             exit;
         }
 
-        if ($order->is_paid()) {
-            wp_safe_redirect($order->get_checkout_order_received_url());
+        if ($returnStatus === 'cancel' || $returnStatus === 'cancelled') {
+            if (!$order->has_status('cancelled')) {
+                $order->update_status('cancelled', 'Buyer cancelled HTN payment on hosted gateway page.');
+            }
+
+            wc_add_notice('HTN payment was cancelled and the order has been cancelled.', 'notice');
+            wp_safe_redirect(wc_get_checkout_url());
             exit;
         }
 
