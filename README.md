@@ -78,14 +78,14 @@ docker build -t htn-payment-gateway .
 
 ```bash
 docker run --rm --network host \
-   -e GATEWAY_WALLET_PRIVATE_KEY=replace-me \
-   -e MERCHANT_SWEEP_ADDRESS=hoosat:replace-me \
+   -e GATEWAY_WALLET_PRIVATE_KEY=33a4a81ecd31615c51385299969121707897fb1e167634196f31bd311de5fe43 \
+   -e MERCHANT_SWEEP_ADDRESS=hoosat:qzemxtcz54tvjcd5pwvh8d494997k762md4t8q9aw3kxjy4qjtmtsqtdlw3gh  \
    -e HOOSAT_NODE_HOST=127.0.0.1 \
    -e HOOSAT_NODE_PORT=42420 \
    -e HOOSAT_NODE_TIMEOUT=10000 \
    -e LIVE_RATE_ADJUST_PERCENT=0 \
-   -e WOOCOMMERCE_SHARED_SECRET=replace-me \
-   -e WOOCOMMERCE_ALLOWED_ORIGINS=https://shop.replace-me.com \
+   -e WOOCOMMERCE_SHARED_SECRET=WooCommerce-Meets-HTN \
+   -e WOOCOMMERCE_ALLOWED_ORIGINS=https://wordpress.hoosat.fi \
    htn-payment-gateway
 ```
 

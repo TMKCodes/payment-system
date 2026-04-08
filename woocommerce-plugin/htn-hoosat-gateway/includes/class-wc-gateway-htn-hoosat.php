@@ -4,7 +4,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-class WC_Gateway_HTN_Hoosat extends WC_Payment_Gateway {
+class HTN_Gateway_For_WooCommerce_Gateway extends WC_Payment_Gateway {
     private const SUPPORTED_PRICING_CURRENCIES = [
         'AED', 'AFN', 'ALL', 'AMD', 'ANG', 'AOA', 'ARS', 'AUD', 'AWG', 'AZN',
         'BAM', 'BBD', 'BDT', 'BIF', 'BMD', 'BND', 'BOB', 'BRL', 'BSD', 'BWP', 'BYN', 'BZD',
@@ -286,14 +286,16 @@ class WC_Gateway_HTN_Hoosat extends WC_Payment_Gateway {
         $response = wp_remote_request($url, array_merge($defaults, $args));
 
         if (is_wp_error($response)) {
-            throw new Exception($response->get_error_message());
+            $errorMessage = sanitize_text_field($response->get_error_message());
+            throw new Exception($errorMessage);
         }
 
-        $status = (int) wp_remote_retrieve_response_code($response);
+        $status = absint(wp_remote_retrieve_response_code($response));
         $body = (string) wp_remote_retrieve_body($response);
 
         if ($status < 200 || $status >= 300) {
-            throw new Exception('Gateway request failed (' . $status . '): ' . substr($body, 0, 500));
+            $bodyPreview = sanitize_text_field(wp_strip_all_tags(substr($body, 0, 500)));
+            throw new Exception(sprintf('Gateway request failed (%d): %s', $status, $bodyPreview));
         }
 
         $data = json_decode($body, true);
@@ -463,7 +465,7 @@ class WC_Gateway_HTN_Hoosat extends WC_Payment_Gateway {
         $gateway = self::get_gateway_instance();
         if (!$gateway) {
             status_header(500);
-            echo esc_html__('Gateway not initialized', 'htn-hoosat-gateway');
+            echo esc_html__('Gateway not initialized', 'htn-gateway-for-woocommerce');
             exit;
         }
 
@@ -519,7 +521,7 @@ class WC_Gateway_HTN_Hoosat extends WC_Payment_Gateway {
         $gateway = self::get_gateway_instance();
         if (!$gateway) {
             status_header(500);
-            echo esc_html__('Gateway not initialized', 'htn-hoosat-gateway');
+            echo esc_html__('Gateway not initialized', 'htn-gateway-for-woocommerce');
             exit;
         }
 
@@ -585,4 +587,8 @@ class WC_Gateway_HTN_Hoosat extends WC_Payment_Gateway {
             exit;
         }
     }
+}
+
+if (!class_exists('WC_Gateway_HTN_Hoosat', false)) {
+    class_alias('HTN_Gateway_For_WooCommerce_Gateway', 'WC_Gateway_HTN_Hoosat');
 }

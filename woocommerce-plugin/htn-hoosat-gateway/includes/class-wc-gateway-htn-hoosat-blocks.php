@@ -28,14 +28,14 @@ final class WC_Gateway_HTN_Hoosat_Blocks extends WC_Gateway_HTN_Hoosat_Blocks_Ba
     /** @var array<string, mixed> */
     protected $settings = [];
 
-    /** @var WC_Gateway_HTN_Hoosat|null */
+    /** @var HTN_Gateway_For_WooCommerce_Gateway|null */
     private $gateway = null;
 
     public function initialize() {
         $this->settings = get_option('woocommerce_' . $this->name . '_settings', []);
 
-        if (class_exists('WC_Gateway_HTN_Hoosat')) {
-            $this->gateway = new WC_Gateway_HTN_Hoosat();
+        if (class_exists('HTN_Gateway_For_WooCommerce_Gateway')) {
+            $this->gateway = new HTN_Gateway_For_WooCommerce_Gateway();
         }
     }
 

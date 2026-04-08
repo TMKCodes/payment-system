@@ -1,4 +1,5 @@
 === HTN Gateway for WooCommerce ===
+Accept Hoosat Network (HTN) payments in WooCommerce via a self-hosted HTN payment gateway.
 Contributors: Toni Lukkaroinen
 Tags: woocommerce, checkout
 Requires at least: 6.0

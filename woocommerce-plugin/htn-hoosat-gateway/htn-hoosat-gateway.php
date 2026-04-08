@@ -2,10 +2,11 @@
 /**
  * Plugin Name: HTN Gateway for WooCommerce
  * Description: Accept Hoosat Network (HTN) payments via a self-hosted HTN payment gateway.
- * Version: 0.1.0
+ * Version: 0.1.1
  * Author: Toni Lukkaroinen
  * License: GPLv2 or later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
+ * Text Domain: htn-gateway-for-woocommerce
  * Requires at least: 6.0
  * Requires PHP: 8.0
  * WC requires at least: 8.0
@@ -31,13 +32,13 @@ add_action('plugins_loaded', function () {
     require_once __DIR__ . '/includes/class-wc-gateway-htn-hoosat.php';
 
     add_filter('woocommerce_payment_gateways', function (array $gateways): array {
-        $gateways[] = 'WC_Gateway_HTN_Hoosat';
+        $gateways[] = 'HTN_Gateway_For_WooCommerce_Gateway';
         return $gateways;
     });
 
     // REST-like callbacks via WC API (/?wc-api=...).
-    add_action('woocommerce_api_htn_gateway_callback', ['WC_Gateway_HTN_Hoosat', 'handle_callback']);
-    add_action('woocommerce_api_htn_gateway_return', ['WC_Gateway_HTN_Hoosat', 'handle_return']);
+    add_action('woocommerce_api_htn_gateway_callback', ['HTN_Gateway_For_WooCommerce_Gateway', 'handle_callback']);
+    add_action('woocommerce_api_htn_gateway_return', ['HTN_Gateway_For_WooCommerce_Gateway', 'handle_return']);
 
     // Register a Cart/Checkout Blocks integration when WooCommerce Blocks is available.
     add_action('woocommerce_blocks_loaded', function () {
