@@ -8,7 +8,7 @@ class WC_Gateway_HTN_Hoosat extends WC_Payment_Gateway {
     public function __construct() {
         $this->id = 'htn_hoosat';
         $this->method_title = 'HTN (Hoosat)';
-        $this->method_description = 'Pay with Hoosat (HTN) using an external hosted gateway page.';
+        $this->method_description = 'Pay with Hoosat (HTN) using an external hosted gateway page. You need to run self hosted HTN Payment Gateway and this plugin will connect to the payment gateway.';
         $this->has_fields = false;
 
         $this->supports = [
@@ -59,9 +59,8 @@ class WC_Gateway_HTN_Hoosat extends WC_Payment_Gateway {
                 'description' => 'How to interpret the WooCommerce order total when converting to HTN.',
                 'default' => 'USD',
                 'options' => [
-                    'HTN' => 'HTN (order currency is HTN)',
-                    'USD' => 'USD (convert to HTN using gateway live rate)',
-                    'EUR' => 'EUR (convert to HTN using gateway live rate)',
+                    'USD' => 'USD (converted to HTN using gateway live rate)',
+                    'EUR' => 'EUR (converted to HTN using gateway live rate)',
                 ],
                 'desc_tip' => true,
             ],
