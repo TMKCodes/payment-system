@@ -5,6 +5,35 @@ if (!defined('ABSPATH')) {
 }
 
 class WC_Gateway_HTN_Hoosat extends WC_Payment_Gateway {
+    private const SUPPORTED_PRICING_CURRENCIES = [
+        'AED', 'AFN', 'ALL', 'AMD', 'ANG', 'AOA', 'ARS', 'AUD', 'AWG', 'AZN',
+        'BAM', 'BBD', 'BDT', 'BIF', 'BMD', 'BND', 'BOB', 'BRL', 'BSD', 'BWP', 'BYN', 'BZD',
+        'CAD', 'CDF', 'CHF', 'CLP', 'CNY', 'COP', 'CRC', 'CVE', 'CZK',
+        'DJF', 'DKK', 'DOP', 'DZD',
+        'EGP', 'ETB', 'EUR',
+        'FJD', 'FKP',
+        'GBP', 'GEL', 'GIP', 'GMD', 'GNF',
+        'GTQ', 'GYD',
+        'HKD', 'HNL', 'HTG', 'HUF',
+        'IDR', 'ILS', 'INR', 'ISK',
+        'JMD', 'JPY',
+        'KES', 'KGS', 'KHR', 'KMF', 'KRW', 'KYD', 'KZT',
+        'LAK', 'LBP', 'LKR', 'LRD', 'LSL',
+        'MAD', 'MDL', 'MGA', 'MKD', 'MMK', 'MNT', 'MOP', 'MUR', 'MVR', 'MWK', 'MXN', 'MYR', 'MZN',
+        'NAD', 'NGN', 'NIO', 'NOK', 'NPR', 'NZD',
+        'PAB', 'PEN', 'PGK', 'PHP', 'PKR', 'PLN', 'PYG',
+        'QAR',
+        'RON', 'RSD', 'RUB', 'RWF',
+        'SAR', 'SBD', 'SCR', 'SEK', 'SGD', 'SHP', 'SLE', 'SOS', 'SRD', 'STD', 'SZL',
+        'THB', 'TJS', 'TOP', 'TRY', 'TTD', 'TWD', 'TZS',
+        'UAH', 'UGX', 'USD', 'UYU', 'UZS',
+        'VND', 'VUV',
+        'WST',
+        'XAF', 'XCD', 'XCG', 'XOF', 'XPF',
+        'YER',
+        'ZAR', 'ZMW',
+    ];
+
     public function __construct() {
         $this->id = 'htn_hoosat';
         $this->method_title = 'HTN (Hoosat)';
@@ -58,10 +87,7 @@ class WC_Gateway_HTN_Hoosat extends WC_Payment_Gateway {
                 'type' => 'select',
                 'description' => 'How to interpret the WooCommerce order total when converting to HTN.',
                 'default' => 'USD',
-                'options' => [
-                    'USD' => 'USD (converted to HTN using gateway live rate)',
-                    'EUR' => 'EUR (converted to HTN using gateway live rate)',
-                ],
+                'options' => $this->pricing_mode_options(),
                 'desc_tip' => true,
             ],
             'shared_secret' => [
@@ -125,10 +151,32 @@ class WC_Gateway_HTN_Hoosat extends WC_Payment_Gateway {
         return sanitize_text_field((string) $this->get_option('shared_secret', ''));
     }
 
+    private function pricing_mode_options(): array {
+        $options = [
+            'HTN' => 'HTN (order total is already in HTN)',
+            'USD' => 'USD (converted to HTN using gateway live rate)',
+            'EUR' => 'EUR (converted to HTN using gateway live rate)',
+        ];
+
+        foreach (self::SUPPORTED_PRICING_CURRENCIES as $currency) {
+            if (isset($options[$currency])) {
+                continue;
+            }
+
+            $options[$currency] = $currency . ' (converted to HTN using gateway live rate)';
+        }
+
+        return $options;
+    }
+
+    private function supported_pricing_modes(): array {
+        return array_merge(['HTN'], self::SUPPORTED_PRICING_CURRENCIES);
+    }
+
     private function pricing_mode(): string {
         $mode = (string) $this->get_option('pricing_mode', 'USD');
         $mode = strtoupper(trim($mode));
-        return in_array($mode, ['HTN', 'USD', 'EUR'], true) ? $mode : 'USD';
+        return in_array($mode, $this->supported_pricing_modes(), true) ? $mode : 'USD';
     }
 
     public function is_available(): bool {
@@ -146,7 +194,7 @@ class WC_Gateway_HTN_Hoosat extends WC_Payment_Gateway {
             return $this->unavailable('missing shared secret');
         }
 
-        // If using USD/EUR conversion, the store currency should match.
+        // If using fiat conversion, the store currency should match the configured pricing mode.
         $mode = $this->pricing_mode();
         if ($mode !== 'HTN') {
             $currency = get_woocommerce_currency();
@@ -267,16 +315,8 @@ class WC_Gateway_HTN_Hoosat extends WC_Payment_Gateway {
                 'method' => 'GET',
             ]);
 
-            if ($mode === 'USD' && isset($price['pricesPerHtn']['USD'])) {
-                $rate = (float) $price['pricesPerHtn']['USD'];
-                if ($rate <= 0) {
-                    return null;
-                }
-                return $total / $rate;
-            }
-
-            if ($mode === 'EUR' && isset($price['pricesPerHtn']['EUR'])) {
-                $rate = (float) $price['pricesPerHtn']['EUR'];
+            if (isset($price['pricesPerHtn']) && is_array($price['pricesPerHtn']) && isset($price['pricesPerHtn'][$mode])) {
+                $rate = (float) $price['pricesPerHtn'][$mode];
                 if ($rate <= 0) {
                     return null;
                 }
