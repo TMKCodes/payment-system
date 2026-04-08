@@ -162,7 +162,7 @@ For Docker deployments, pass these values with `docker run -e ...` or via an env
 
 ### Install the WooCommerce plugin
 
-- Plugin source: [woocommerce-plugin/htn-hoosat-gateway](woocommerce-plugin/htn-hoosat-gateway)
+- Plugin source: [htn-gateway-for-woocommerce](htn-gateway-for-woocommerce)
 - Zip the folder and upload it in WordPress: **Plugins → Add New → Upload Plugin**
 
 ### Configure WooCommerce
