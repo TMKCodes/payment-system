@@ -221,7 +221,7 @@ export default function PaySessionClient(props: {
     } catch (error) {
       console.error(error);
       // Don't block redirect: the return handler can still verify the payment.
-      setErrorText((error as Error).message ?? "Failed to notify WooCommerce");
+      setErrorText("");
     } finally {
       setIsNotifying(false);
     }

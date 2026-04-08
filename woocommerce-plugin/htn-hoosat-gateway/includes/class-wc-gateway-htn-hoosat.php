@@ -82,6 +82,25 @@ class WC_Gateway_HTN_Hoosat extends WC_Payment_Gateway {
         ];
     }
 
+    public function validate_gateway_url_field($key, $value) {
+        $value = is_string($value) ? trim(wp_unslash($value)) : '';
+        $value = esc_url_raw($value, ['http', 'https']);
+        return rtrim($value, '/');
+    }
+
+    public function validate_shared_secret_field($key, $value) {
+        $value = is_string($value) ? wp_unslash($value) : '';
+        return sanitize_text_field($value);
+    }
+
+    private static function get_request_string(array $source, string $key): string {
+        if (!isset($source[$key]) || !is_scalar($source[$key])) {
+            return '';
+        }
+
+        return sanitize_text_field(wp_unslash((string) $source[$key]));
+    }
+
     private function log(string $message, array $context = []): void {
         $debug = $this->get_option('debug', 'no') === 'yes';
         if (!$debug) {
@@ -99,12 +118,12 @@ class WC_Gateway_HTN_Hoosat extends WC_Payment_Gateway {
 
     private function gateway_base_url(): string {
         $raw = (string) $this->get_option('gateway_url', '');
-        $raw = trim($raw);
+        $raw = esc_url_raw(trim($raw), ['http', 'https']);
         return rtrim($raw, '/');
     }
 
     private function shared_secret(): string {
-        return (string) $this->get_option('shared_secret', '');
+        return sanitize_text_field((string) $this->get_option('shared_secret', ''));
     }
 
     private function pricing_mode(): string {
@@ -406,15 +425,12 @@ class WC_Gateway_HTN_Hoosat extends WC_Payment_Gateway {
         $gateway = self::get_gateway_instance();
         if (!$gateway) {
             status_header(500);
-            echo 'Gateway not initialized';
+            echo esc_html__('Gateway not initialized', 'htn-hoosat-gateway');
             exit;
         }
 
         $rawBody = file_get_contents('php://input');
-        $signatureHeader = '';
-        if (isset($_SERVER['HTTP_X_HTN_SIGNATURE'])) {
-            $signatureHeader = (string) $_SERVER['HTTP_X_HTN_SIGNATURE'];
-        }
+        $signatureHeader = self::get_request_string($_SERVER, 'HTTP_X_HTN_SIGNATURE');
 
         if (!$gateway->verify_signature((string) $rawBody, $signatureHeader)) {
             $gateway->log('Invalid callback signature');
@@ -457,7 +473,7 @@ class WC_Gateway_HTN_Hoosat extends WC_Payment_Gateway {
             wp_send_json_success(['ok' => true]);
         } catch (Exception $e) {
             $gateway->log('Callback processing error', ['error' => $e->getMessage()]);
-            wp_send_json_error(['error' => $e->getMessage()], 500);
+            wp_send_json_error(['error' => 'Internal callback processing error'], 500);
         }
     }
 
@@ -465,14 +481,14 @@ class WC_Gateway_HTN_Hoosat extends WC_Payment_Gateway {
         $gateway = self::get_gateway_instance();
         if (!$gateway) {
             status_header(500);
-            echo 'Gateway not initialized';
+            echo esc_html__('Gateway not initialized', 'htn-hoosat-gateway');
             exit;
         }
 
-        $orderId = isset($_GET['order_id']) ? (int) $_GET['order_id'] : 0;
-        $orderKey = isset($_GET['key']) ? (string) $_GET['key'] : '';
-        $paymentSessionId = isset($_GET['htn_session']) ? (string) $_GET['htn_session'] : '';
-        $returnStatus = isset($_GET['htn_status']) ? strtolower(trim((string) $_GET['htn_status'])) : '';
+        $orderId = absint(self::get_request_string($_GET, 'order_id'));
+        $orderKey = self::get_request_string($_GET, 'key');
+        $paymentSessionId = self::get_request_string($_GET, 'htn_session');
+        $returnStatus = strtolower(self::get_request_string($_GET, 'htn_status'));
 
         if ($orderId <= 0 || $orderKey === '') {
             wc_add_notice('Invalid return parameters', 'error');
@@ -526,7 +542,7 @@ class WC_Gateway_HTN_Hoosat extends WC_Payment_Gateway {
             exit;
         } catch (Exception $e) {
             $gateway->log('Return handler error', ['error' => $e->getMessage()]);
-            wc_add_notice('Error verifying payment: ' . $e->getMessage(), 'error');
+            wc_add_notice('Error verifying payment. Please try again or contact support.', 'error');
             wp_safe_redirect($order->get_checkout_payment_url());
             exit;
         }

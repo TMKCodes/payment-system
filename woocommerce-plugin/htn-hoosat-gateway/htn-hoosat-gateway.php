@@ -1,9 +1,11 @@
 <?php
 /**
- * Plugin Name: HTN Hoosat Gateway for WooCommerce
- * Description: Accept Hoosat (HTN) payments via a hosted HTN payment gateway.
+ * Plugin Name: HTN Gateway for WooCommerce
+ * Description: Accept Hoosat Network (HTN) payments via a self-hosted HTN payment gateway.
  * Version: 0.1.0
- * Author: HTN
+ * Author: Toni Lukkaroinen
+ * License: GPLv2 or later
+ * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  * Requires at least: 6.0
  * Requires PHP: 8.0
  * WC requires at least: 8.0
