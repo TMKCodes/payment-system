@@ -153,7 +153,6 @@ class WC_Gateway_HTN_Hoosat extends WC_Payment_Gateway {
 
     private function pricing_mode_options(): array {
         $options = [
-            'HTN' => 'HTN (order total is already in HTN)',
             'USD' => 'USD (converted to HTN using gateway live rate)',
             'EUR' => 'EUR (converted to HTN using gateway live rate)',
         ];
