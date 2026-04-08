@@ -287,7 +287,7 @@ class HTN_Gateway_For_WooCommerce_Gateway extends WC_Payment_Gateway {
 
         if (is_wp_error($response)) {
             $errorMessage = sanitize_text_field($response->get_error_message());
-            throw new Exception($errorMessage);
+            throw new Exception(esc_html($errorMessage));
         }
 
         $status = absint(wp_remote_retrieve_response_code($response));
@@ -295,7 +295,11 @@ class HTN_Gateway_For_WooCommerce_Gateway extends WC_Payment_Gateway {
 
         if ($status < 200 || $status >= 300) {
             $bodyPreview = sanitize_text_field(wp_strip_all_tags(substr($body, 0, 500)));
-            throw new Exception(sprintf('Gateway request failed (%d): %s', $status, $bodyPreview));
+            throw new Exception(sprintf(
+                'Gateway request failed (%s): %s',
+                esc_html((string) $status),
+                esc_html($bodyPreview)
+            ));
         }
 
         $data = json_decode($body, true);
@@ -525,10 +529,11 @@ class HTN_Gateway_For_WooCommerce_Gateway extends WC_Payment_Gateway {
             exit;
         }
 
-        $orderId = absint(self::get_request_string($_GET, 'order_id'));
-        $orderKey = self::get_request_string($_GET, 'key');
-        $paymentSessionId = self::get_request_string($_GET, 'htn_session');
-        $returnStatus = strtolower(self::get_request_string($_GET, 'htn_status'));
+        // The hosted gateway redirects shoppers back here, so a WordPress nonce is not available on this public return endpoint.
+        $orderId = absint(self::get_request_string($_GET, 'order_id')); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+        $orderKey = self::get_request_string($_GET, 'key'); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+        $paymentSessionId = self::get_request_string($_GET, 'htn_session'); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+        $returnStatus = strtolower(self::get_request_string($_GET, 'htn_status')); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 
         if ($orderId <= 0 || $orderKey === '') {
             wc_add_notice('Invalid return parameters', 'error');
