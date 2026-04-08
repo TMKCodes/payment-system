@@ -18,24 +18,24 @@ if (
     }
 }
 
-if (!class_exists('WC_Gateway_HTN_Hoosat_Blocks_Base') || class_exists('WC_Gateway_HTN_Hoosat_Blocks')) {
+if (!class_exists('WC_Gateway_HTN_Hoosat_Blocks_Base') || class_exists('HTN_Hoosat_Blocks')) {
     return;
 }
 
-final class WC_Gateway_HTN_Hoosat_Blocks extends WC_Gateway_HTN_Hoosat_Blocks_Base {
+final class HTN_Hoosat_Blocks extends WC_Gateway_HTN_Hoosat_Blocks_Base {
     protected $name = 'htn_hoosat';
 
     /** @var array<string, mixed> */
     protected $settings = [];
 
-    /** @var HTN_Gateway_For_WooCommerce_Gateway|null */
+    /** @var HTN_Gateway|null */
     private $gateway = null;
 
     public function initialize() {
         $this->settings = get_option('woocommerce_' . $this->name . '_settings', []);
 
-        if (class_exists('HTN_Gateway_For_WooCommerce_Gateway')) {
-            $this->gateway = new HTN_Gateway_For_WooCommerce_Gateway();
+        if (class_exists('HTN_Gateway')) {
+            $this->gateway = new HTN_Gateway();
         }
     }
 

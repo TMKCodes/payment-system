@@ -4,7 +4,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-class HTN_Gateway_For_WooCommerce_Gateway extends WC_Payment_Gateway {
+class HTN_Gateway extends WC_Payment_Gateway {
     private const SUPPORTED_PRICING_CURRENCIES = [
         'AED', 'AFN', 'ALL', 'AMD', 'ANG', 'AOA', 'ARS', 'AUD', 'AWG', 'AZN',
         'BAM', 'BBD', 'BDT', 'BIF', 'BMD', 'BND', 'BOB', 'BRL', 'BSD', 'BWP', 'BYN', 'BZD',
@@ -598,5 +598,5 @@ class HTN_Gateway_For_WooCommerce_Gateway extends WC_Payment_Gateway {
 }
 
 if (!class_exists('WC_Gateway_HTN_Hoosat', false)) {
-    class_alias('HTN_Gateway_For_WooCommerce_Gateway', 'WC_Gateway_HTN_Hoosat');
+    class_alias('HTN_Gateway', 'WC_Gateway_HTN_Hoosat');
 }
