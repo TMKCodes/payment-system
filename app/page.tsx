@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 const SUPPORTED_FIAT_CURRENCIES = [
   "USD",
@@ -216,12 +216,22 @@ export default function Home() {
   const [fiatRates, setFiatRates] = useState<Record<SupportedFiatCurrency, string>>(getInitialFiatRates);
   const [qrCode, setQrCode] = useState("");
   const [paymentStatus, setPaymentStatus] = useState("");
+  const [sessionAmountHtn, setSessionAmountHtn] = useState("");
   const [address, setAddress] = useState("");
   const [paymentSessionId, setPaymentSessionId] = useState("");
   const [isPaymentComplete, setIsPaymentComplete] = useState(false);
   const [isConfirmingTransaction, setIsConfirmingTransaction] = useState(false);
   const [isSweepSubmitted, setIsSweepSubmitted] = useState(false);
+  const [isPreparingPayment, setIsPreparingPayment] = useState(false);
   const [isClient, setIsClient] = useState(false);
+  const prepareAbortRef = useRef<AbortController | null>(null);
+
+  const cancelPreparingPayment = () => {
+    prepareAbortRef.current?.abort();
+    prepareAbortRef.current = null;
+    setIsPreparingPayment(false);
+    setPaymentStatus("");
+  };
 
   const isFiatMode = priceInputMode !== "HTN";
   const fiatLabel = priceInputMode;
@@ -270,7 +280,7 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (!qrCode || !address || !amountHtn || !paymentSessionId || isPaymentComplete) {
+    if (!qrCode || !address || !sessionAmountHtn || !paymentSessionId || isPaymentComplete) {
       return;
     }
 
@@ -279,10 +289,10 @@ export default function Home() {
     }, 5000);
 
     return () => clearInterval(intervalId);
-  }, [qrCode, address, amountHtn, paymentSessionId, isPaymentComplete]);
+  }, [qrCode, address, sessionAmountHtn, paymentSessionId, isPaymentComplete]);
 
   const checkPayment = async ({ silent = false }: { silent?: boolean } = {}) => {
-    if (!address || !amountHtn || !paymentSessionId) return;
+    if (!address || !sessionAmountHtn || !paymentSessionId) return;
 
     try {
       if (!silent) {
@@ -296,10 +306,35 @@ export default function Home() {
         },
         body: JSON.stringify({
           address,
-          amount: amountHtn,
+          amount: sessionAmountHtn,
           sessionId: paymentSessionId,
         }),
       });
+
+      if (response.status === 410) {
+        const expiredData = (await response.json().catch(() => ({}))) as { error?: string };
+        setQrCode("");
+        setAddress("");
+        setPaymentSessionId("");
+        setSessionAmountHtn("");
+        setIsPaymentComplete(false);
+        setIsSweepSubmitted(false);
+        setIsConfirmingTransaction(false);
+        setPaymentStatus(expiredData.error ?? "Payment session expired. Please start a new payment.");
+        return;
+      }
+
+      if (response.status === 409) {
+        const busyData = (await response.json().catch(() => ({}))) as { error?: string; retryAfterSeconds?: number };
+        const retryAfter =
+          typeof busyData.retryAfterSeconds === "number" && busyData.retryAfterSeconds > 0
+            ? ` Try again in ${busyData.retryAfterSeconds}s.`
+            : "";
+        setIsPaymentComplete(false);
+        setIsSweepSubmitted(false);
+        setPaymentStatus((busyData.error ?? "Payment gateway is busy.") + retryAfter);
+        return;
+      }
 
       if (!response.ok) {
         throw new Error("Failed to check payment");
@@ -329,6 +364,9 @@ export default function Home() {
 
       if (sessionInitialized) {
         setIsPaymentComplete(false);
+        if (typeof expectedAmountHtn === "string" && expectedAmountHtn.trim()) {
+          setSessionAmountHtn(expectedAmountHtn);
+        }
         setPaymentStatus(`Payment session initialized. Waiting for ${expectedAmountHtn} HTN.`);
         return;
       }
@@ -357,18 +395,36 @@ export default function Home() {
     }
   };
 
-  const cancelPayment = () => {
-    setQrCode("");
-    setAddress("");
-    setPaymentSessionId("");
-    setPaymentStatus("");
-    setIsPaymentComplete(false);
-    setIsConfirmingTransaction(false);
-    setIsSweepSubmitted(false);
+  const cancelPayment = async () => {
+    try {
+      if (address && sessionAmountHtn && paymentSessionId) {
+        await fetch("/api/check-payment", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            address,
+            amount: sessionAmountHtn,
+            sessionId: paymentSessionId,
+            action: "cancel-session",
+          }),
+        });
+      }
+    } catch {
+      // best-effort cancel; still clear local state
+    } finally {
+      setQrCode("");
+      setAddress("");
+      setPaymentSessionId("");
+      setPaymentStatus("");
+      setSessionAmountHtn("");
+      setIsPaymentComplete(false);
+      setIsConfirmingTransaction(false);
+      setIsSweepSubmitted(false);
+    }
   };
 
   const confirmTransaction = async () => {
-    if (!address || !amountHtn || !paymentSessionId) return;
+    if (!address || !sessionAmountHtn || !paymentSessionId) return;
 
     try {
       setIsConfirmingTransaction(true);
@@ -381,17 +437,22 @@ export default function Home() {
         },
         body: JSON.stringify({
           address,
-          amount: amountHtn,
+          amount: sessionAmountHtn,
           sessionId: paymentSessionId,
           action: "confirm-transaction",
         }),
       });
 
+      if (response.status === 409) {
+        const busyData = (await response.json().catch(() => ({}))) as { error?: string };
+        throw new Error(busyData.error ?? "Payment gateway is busy.");
+      }
+
       if (!response.ok) {
         throw new Error("Failed to confirm transaction");
       }
 
-      cancelPayment();
+      await cancelPayment();
     } catch (error) {
       console.error("Error confirming transaction:", error);
       setPaymentStatus("Error confirming transaction: " + (error as Error).message);
@@ -404,54 +465,114 @@ export default function Home() {
     if (!amountHtn) return;
 
     try {
+      if (isPreparingPayment) return;
+
+      const controller = new AbortController();
+      prepareAbortRef.current?.abort();
+      prepareAbortRef.current = controller;
+
       const newSessionId = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
+      const requestedAmountHtn = amountHtn;
       setIsPaymentComplete(false);
       setIsConfirmingTransaction(false);
       setIsSweepSubmitted(false);
       setQrCode("");
       setPaymentStatus("Preparing payment request...");
+      setIsPreparingPayment(true);
+      setSessionAmountHtn("");
 
       // Get merchant address from server-side API
-      const response = await fetch("/api/merchant/address");
+      const response = await fetch("/api/merchant/address", { signal: controller.signal });
       if (!response.ok) {
-        throw new Error("Failed to get merchant address");
+        const body = (await response.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error ?? "Failed to get merchant address");
       }
       const { address: merchantAddress } = await response.json();
-      setAddress(merchantAddress);
-      setPaymentSessionId(newSessionId);
 
-      // Dynamically import the SDK to avoid SSR issues
-      const { HoosatQR } = await import("hoosat-sdk-web");
+      const delay = (ms: number, signal?: AbortSignal) =>
+        new Promise<void>((resolve, reject) => {
+          const onAbort = () => {
+            window.clearTimeout(timeoutId);
+            signal?.removeEventListener("abort", onAbort);
+            reject(new DOMException("Aborted", "AbortError"));
+          };
 
-      // Generate payment QR using built-in QR generator
-      const qrDataUrl = await HoosatQR.generatePaymentQR({
-        address: merchantAddress,
-        amount: parseFloat(amountHtn),
-        label: "Merchant Payment",
-      });
-      setQrCode(qrDataUrl);
+          const timeoutId = window.setTimeout(() => {
+            signal?.removeEventListener("abort", onAbort);
+            resolve();
+          }, ms);
 
-      const sessionResponse = await fetch("/api/check-payment", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
+          if (signal) {
+            if (signal.aborted) {
+              onAbort();
+              return;
+            }
+            signal.addEventListener("abort", onAbort);
+          }
+        });
+
+      setPaymentStatus("Waiting for payment gateway to be ready...");
+
+      while (true) {
+        const sessionResponse = await fetch("/api/check-payment", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          signal: controller.signal,
+          body: JSON.stringify({
+            address: merchantAddress,
+            amount: requestedAmountHtn,
+            sessionId: newSessionId,
+          }),
+        });
+
+        if (sessionResponse.status === 409) {
+          const busyData = (await sessionResponse.json().catch(() => ({}))) as {
+            error?: string;
+            retryAfterSeconds?: number;
+          };
+          setPaymentStatus(busyData.error ?? "Payment gateway is currently busy. Waiting...");
+          await delay(5000, controller.signal);
+          continue;
+        }
+
+        if (!sessionResponse.ok) {
+          throw new Error("Failed to initialize payment session");
+        }
+
+        const { expectedAmountHtn } = (await sessionResponse.json()) as { expectedAmountHtn?: string };
+        const finalAmountHtn =
+          typeof expectedAmountHtn === "string" && expectedAmountHtn.trim() ? expectedAmountHtn : requestedAmountHtn;
+
+        // We now hold the gateway reservation: show QR and start polling.
+        setAddress(merchantAddress);
+        setPaymentSessionId(newSessionId);
+        setSessionAmountHtn(finalAmountHtn);
+
+        // Dynamically import the SDK to avoid SSR issues
+        const { HoosatQR } = await import("hoosat-sdk-web");
+
+        // Generate payment QR using built-in QR generator
+        const qrDataUrl = await HoosatQR.generatePaymentQR({
           address: merchantAddress,
-          amount: amountHtn,
-          sessionId: newSessionId,
-        }),
-      });
+          amount: parseFloat(finalAmountHtn),
+          label: "Merchant Payment",
+        });
+        setQrCode(qrDataUrl);
 
-      if (!sessionResponse.ok) {
-        throw new Error("Failed to initialize payment session");
+        setPaymentStatus(`Payment session initialized. Waiting for ${finalAmountHtn} HTN.`);
+        break;
       }
-
-      const { expectedAmountHtn } = await sessionResponse.json();
-      setPaymentStatus(`Payment session initialized. Waiting for ${expectedAmountHtn} HTN.`);
     } catch (error) {
+      if ((error as Error)?.name === "AbortError") {
+        return;
+      }
       console.error("Error generating QR code:", error);
       setPaymentStatus("Error generating payment request: " + (error as Error).message);
+    } finally {
+      prepareAbortRef.current = null;
+      setIsPreparingPayment(false);
     }
   };
 
@@ -538,16 +659,32 @@ export default function Home() {
             {priceInputMode === "HTN" && <div className="mb-4" />}
             <button
               onClick={generateQR}
-              disabled={!amountHtn}
+              disabled={!amountHtn || isPreparingPayment}
               className="w-full bg-blue-500 text-white p-2 rounded hover:bg-blue-600 mb-4"
             >
-              Generate Payment QR Code
+              {isPreparingPayment ? "Waiting for gateway..." : "Generate Payment QR Code"}
             </button>
+
+            {isPreparingPayment ? (
+              <button
+                type="button"
+                onClick={cancelPreparingPayment}
+                className="w-full bg-gray-200 text-gray-900 p-2 rounded hover:bg-gray-300 mb-4"
+              >
+                Cancel
+              </button>
+            ) : null}
+
+            {paymentStatus && (
+              <p className="-mt-2 mb-4 text-sm text-gray-700" aria-live="polite">
+                {paymentStatus}
+              </p>
+            )}
           </>
         )}
         {qrCode && (
           <div className="mt-4 text-center">
-            <p className="mb-4 text-2xl font-semibold text-gray-800">Scan to pay {amountHtn} HTN</p>
+            <p className="mb-4 text-2xl font-semibold text-gray-800">Scan to pay {sessionAmountHtn || amountHtn} HTN</p>
             {isFiatMode && (
               <p className="-mt-2 mb-4 text-sm text-gray-600">
                 Priced at {amount} {fiatLabel}

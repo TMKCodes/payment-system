@@ -10,7 +10,7 @@ type PaymentDetails = {
 };
 
 type CheckPaymentResponse = {
-  paymentStatus: "completed" | "pending_confirmation" | "waiting_for_payment";
+  paymentStatus: "completed" | "pending_confirmation" | "waiting_for_payment" | "gateway_in_use" | "expired";
   paymentDetails: PaymentDetails | null;
   expectedAmountHtn: string;
   sessionInitialized: boolean;
@@ -48,6 +48,7 @@ export default function PaySessionClient(props: {
   const [paymentDetails, setPaymentDetails] = useState<PaymentDetails | null>(null);
   const [expectedAmountHtn, setExpectedAmountHtn] = useState<string>(amountHtn);
   const [isNotifying, setIsNotifying] = useState<boolean>(false);
+  const [hasExpired, setHasExpired] = useState<boolean>(false);
   const notifyOnceRef = useRef<boolean>(false);
 
   const canRedirect = useMemo(() => isProbablySafeReturnUrl(returnUrl), [returnUrl]);
@@ -106,21 +107,45 @@ export default function PaySessionClient(props: {
 
       setStatusText("Initializing payment session...");
 
-      const initResponse = await fetch("/api/check-payment", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          address: merchantData.address,
-          amount: amountHtn,
-          sessionId: paymentSessionId,
-        }),
-      });
+      const delay = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms));
 
-      if (!initResponse.ok) {
-        throw new Error(`Failed to initialize payment session (${initResponse.status})`);
+      let initData: Partial<CheckPaymentResponse> | null = null;
+
+      while (true) {
+        const initResponse = await fetch("/api/check-payment", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            address: merchantData.address,
+            amount: amountHtn,
+            sessionId: paymentSessionId,
+          }),
+        });
+
+        if (initResponse.status === 410) {
+          const expiredData = (await initResponse.json().catch(() => ({}))) as { error?: string };
+          setHasExpired(true);
+          setErrorText("");
+          setStatusText(expiredData.error ?? "Payment session expired. Please restart checkout.");
+          return;
+        }
+
+        if (initResponse.status === 409) {
+          const busyData = (await initResponse.json().catch(() => ({}))) as { error?: string };
+          setErrorText("");
+          setStatusText(busyData.error ?? "Gateway busy. Waiting for availability...");
+          await delay(5000);
+          continue;
+        }
+
+        if (!initResponse.ok) {
+          throw new Error(`Failed to initialize payment session (${initResponse.status})`);
+        }
+
+        initData = (await initResponse.json()) as Partial<CheckPaymentResponse>;
+        break;
       }
 
-      const initData = (await initResponse.json()) as Partial<CheckPaymentResponse>;
       if (typeof initData.expectedAmountHtn === "string") {
         setExpectedAmountHtn(initData.expectedAmountHtn);
       }
@@ -134,7 +159,7 @@ export default function PaySessionClient(props: {
   };
 
   const poll = async (silent = true) => {
-    if (!merchantAddress || !amountHtn) return;
+    if (!merchantAddress || !amountHtn || hasExpired) return;
 
     try {
       if (!silent) setStatusText("Checking payment...");
@@ -148,6 +173,23 @@ export default function PaySessionClient(props: {
           sessionId: paymentSessionId,
         }),
       });
+
+      if (response.status === 410) {
+        const expiredData = (await response.json().catch(() => ({}))) as { error?: string };
+        setHasExpired(true);
+        setIsComplete(false);
+        setErrorText("");
+        setStatusText(expiredData.error ?? "Payment session expired. Please restart checkout.");
+        return;
+      }
+
+      if (response.status === 409) {
+        const busyData = (await response.json().catch(() => ({}))) as { error?: string };
+        setIsComplete(false);
+        setErrorText("");
+        setStatusText(busyData.error ?? "Gateway busy. Please wait...");
+        return;
+      }
 
       if (!response.ok) {
         throw new Error(`Failed to check payment (${response.status})`);
@@ -227,13 +269,31 @@ export default function PaySessionClient(props: {
     }
   };
 
+  const cancelSession = async () => {
+    if (!merchantAddress || !amountHtn) return;
+    try {
+      await fetch("/api/check-payment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          address: merchantAddress,
+          amount: amountHtn,
+          sessionId: paymentSessionId,
+          action: "cancel-session",
+        }),
+      });
+    } catch {
+      // best-effort cancel
+    }
+  };
+
   useEffect(() => {
     void initialize();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paymentSessionId]);
 
   useEffect(() => {
-    if (!merchantAddress || !qrCodeDataUrl || !amountHtn || isComplete) return;
+    if (!merchantAddress || !qrCodeDataUrl || !amountHtn || isComplete || hasExpired) return;
 
     const intervalId = window.setInterval(() => {
       void poll(true);
@@ -241,7 +301,7 @@ export default function PaySessionClient(props: {
 
     return () => window.clearInterval(intervalId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [merchantAddress, qrCodeDataUrl, amountHtn, paymentSessionId, isComplete]);
+  }, [merchantAddress, qrCodeDataUrl, amountHtn, paymentSessionId, isComplete, hasExpired]);
 
   useEffect(() => {
     if (!isComplete) return;
@@ -326,7 +386,10 @@ export default function PaySessionClient(props: {
             <button
               type="button"
               onClick={() => {
-                if (canRedirect) redirectToReturnUrl("cancel");
+                void (async () => {
+                  await cancelSession();
+                  if (canRedirect) redirectToReturnUrl("cancel");
+                })();
               }}
               className="text-sm px-3 py-2 rounded border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-60"
               disabled={!canRedirect}

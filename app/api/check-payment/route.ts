@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { HoosatClient, HoosatCrypto, HoosatTxBuilder, HoosatUtils, type UtxoForSigning } from "hoosat-sdk";
+import {
+  clearExpiredSession,
+  findActiveSessionForAddressAndAmount,
+  isSessionExpired,
+  paymentSessions,
+  pruneExpiredSessions,
+} from "../../lib/gateway-state";
 
 type PaymentSession = {
   address: string;
@@ -11,6 +18,7 @@ type PaymentSession = {
   sweepTransactionHash: string | null;
   createdAt: number;
   updatedAt: number;
+  initializing?: boolean;
 };
 
 type ObservedConfirmedPayment = {
@@ -30,6 +38,8 @@ type ObservedPendingPayment = {
   amountHtn: string;
 };
 
+const typedPaymentSessions = paymentSessions as unknown as Map<string, PaymentSession>;
+
 const sdkNodePort = Number.parseInt(process.env.HOOSAT_NODE_PORT ?? "42420", 10);
 const sdkNodeTimeout = Number.parseInt(process.env.HOOSAT_NODE_TIMEOUT ?? "10000", 10);
 
@@ -39,8 +49,7 @@ const SDK_NODE_CONFIG = {
   timeout: Number.isFinite(sdkNodeTimeout) ? sdkNodeTimeout : 60000,
 };
 
-const SESSION_TTL_MS = 6 * 60 * 60 * 1000;
-const paymentSessions = new Map<string, PaymentSession>();
+const sweepInFlightByAddress = new Map<string, Promise<string>>();
 
 function toSigningUtxo(utxo: {
   outpoint: { transactionId: string; index: number };
@@ -65,15 +74,7 @@ function toSigningUtxo(utxo: {
   };
 }
 
-function pruneExpiredSessions() {
-  const now = Date.now();
-
-  for (const [sessionId, session] of paymentSessions.entries()) {
-    if (now - session.updatedAt > SESSION_TTL_MS) {
-      paymentSessions.delete(sessionId);
-    }
-  }
-}
+// pruning is handled by shared gateway-state module
 
 function buildConfirmedPayments(
   address: string,
@@ -274,7 +275,7 @@ async function findConfirmedTrackedCandidatePayment(
       continue;
     }
 
-    if (BigInt(confirmedAmount) < BigInt(expectedAmountSompi)) {
+    if (BigInt(confirmedAmount) !== BigInt(expectedAmountSompi)) {
       continue;
     }
 
@@ -295,9 +296,11 @@ async function findConfirmedTrackedCandidatePayment(
 
 export async function POST(request: NextRequest) {
   const client = new HoosatClient(SDK_NODE_CONFIG);
+  let reservedSessionId: string | null = null;
 
   try {
-    pruneExpiredSessions();
+    const now = Date.now();
+    pruneExpiredSessions(now);
 
     const { address, amount, sessionId, action } = await request.json();
 
@@ -319,6 +322,68 @@ export async function POST(request: NextRequest) {
 
     const expectedAmountSompi = HoosatUtils.amountToSompi(String(amount));
 
+    if (isSessionExpired(sessionId, now)) {
+      return NextResponse.json(
+        {
+          paymentStatus: "expired",
+          sessionExpired: true,
+          error: "Payment session expired due to timeout. Please start a new payment.",
+        },
+        { status: 410 },
+      );
+    }
+
+    if (action === "cancel-session") {
+      typedPaymentSessions.delete(sessionId);
+      clearExpiredSession(sessionId);
+      return NextResponse.json({ ok: true, cancelled: true });
+    }
+
+    const existingSessionRaw = typedPaymentSessions.get(sessionId);
+    const existingSession = existingSessionRaw as PaymentSession | undefined;
+    const existingSessionMatches =
+      existingSession?.address === address && existingSession?.amountSompi === expectedAmountSompi;
+
+    const needsInitialization = !existingSessionMatches || Boolean(existingSession?.initializing);
+
+    if (needsInitialization) {
+      const activeOther = findActiveSessionForAddressAndAmount(address, expectedAmountSompi, {
+        ignoreSessionId: sessionId,
+        now,
+      });
+
+      if (activeOther) {
+        return NextResponse.json(
+          {
+            paymentStatus: "gateway_in_use",
+            activeSessionId: activeOther.sessionId,
+            retryAfterSeconds: 5,
+            error: "Payment gateway is currently processing another payment session.",
+          },
+          { status: 409 },
+        );
+      }
+
+      if (!existingSessionMatches) {
+        // Reserve the gateway for this session early to avoid races between two concurrent init requests.
+        const reservedSession: PaymentSession = {
+          address,
+          amountSompi: expectedAmountSompi,
+          knownConfirmedTxIds: new Set<string>(),
+          knownPendingTxIds: new Set<string>(),
+          trackedCandidatePayments: new Map<string, ObservedPendingPayment>(),
+          completedPayment: null,
+          sweepTransactionHash: null,
+          createdAt: now,
+          updatedAt: now,
+          initializing: true,
+        };
+
+        typedPaymentSessions.set(sessionId, reservedSession);
+        reservedSessionId = sessionId;
+      }
+    }
+
     const [utxosResult, mempoolResult] = await Promise.all([
       client.getUtxosByAddresses([address]),
       client.getMempoolEntriesByAddresses([address]),
@@ -335,23 +400,18 @@ export async function POST(request: NextRequest) {
     const observedConfirmedPayments = buildConfirmedPayments(address, utxosResult.result.utxos);
     const observedPendingPayments = buildPendingPayments(address, mempoolResult.result.entries);
 
-    const now = Date.now();
-    const existingSession = paymentSessions.get(sessionId);
-
-    const session =
-      existingSession && existingSession.address === address && existingSession.amountSompi === expectedAmountSompi
-        ? existingSession
-        : {
-          address,
-          amountSompi: expectedAmountSompi,
-          knownConfirmedTxIds: new Set<string>(),
-          knownPendingTxIds: new Set<string>(),
-          trackedCandidatePayments: new Map<string, ObservedPendingPayment>(),
-          completedPayment: null,
-          sweepTransactionHash: null,
-          createdAt: now,
-          updatedAt: now,
-        };
+    const session = typedPaymentSessions.get(sessionId) ?? {
+      address,
+      amountSompi: expectedAmountSompi,
+      knownConfirmedTxIds: new Set<string>(),
+      knownPendingTxIds: new Set<string>(),
+      trackedCandidatePayments: new Map<string, ObservedPendingPayment>(),
+      completedPayment: null,
+      sweepTransactionHash: null,
+      createdAt: now,
+      updatedAt: now,
+      initializing: true,
+    };
 
     const maybeSubmitSweepTransaction = async () => {
       if (!session.completedPayment) {
@@ -366,7 +426,7 @@ export async function POST(request: NextRequest) {
         return session.sweepTransactionHash;
       }
 
-      const merchantPrivateKey = process.env.GATEWAY_WALLET_PRIVATE_KEY;
+      const merchantPrivateKey = process.env.GATEWAY_WALLET_PRIVATE_KEY ?? process.env.MERCHANT_PRIVATE_KEY;
       const sweepAddress = process.env.MERCHANT_SWEEP_ADDRESS;
 
       if (!merchantPrivateKey) {
@@ -381,20 +441,30 @@ export async function POST(request: NextRequest) {
         throw new Error("MERCHANT_SWEEP_ADDRESS is invalid");
       }
 
-      session.sweepTransactionHash = await sweepMerchantFunds(client, merchantPrivateKey, sweepAddress);
+      const inFlight = sweepInFlightByAddress.get(address);
+
+      if (inFlight) {
+        session.sweepTransactionHash = await inFlight;
+      } else {
+        const sweepPromise = sweepMerchantFunds(client, merchantPrivateKey, sweepAddress);
+        sweepInFlightByAddress.set(address, sweepPromise);
+        try {
+          session.sweepTransactionHash = await sweepPromise;
+        } finally {
+          sweepInFlightByAddress.delete(address);
+        }
+      }
       session.completedPayment = {
         ...session.completedPayment,
         sweepTransactionHash: session.sweepTransactionHash,
       };
       session.updatedAt = now;
-      paymentSessions.set(sessionId, session);
+      typedPaymentSessions.set(sessionId, session);
 
       return session.sweepTransactionHash;
     };
 
-    const isNewSession = !existingSession || session !== existingSession;
-
-    if (isNewSession) {
+    if (needsInitialization) {
       for (const payment of observedConfirmedPayments) {
         session.knownConfirmedTxIds.add(payment.transactionHash);
       }
@@ -403,7 +473,9 @@ export async function POST(request: NextRequest) {
         session.knownPendingTxIds.add(payment.transactionHash);
       }
 
-      paymentSessions.set(sessionId, session);
+      session.initializing = false;
+      session.updatedAt = now;
+      typedPaymentSessions.set(sessionId, session);
 
       return NextResponse.json({
         paymentStatus: "waiting_for_payment",
@@ -422,7 +494,7 @@ export async function POST(request: NextRequest) {
       }
 
       session.updatedAt = now;
-      paymentSessions.set(sessionId, session);
+      typedPaymentSessions.set(sessionId, session);
 
       return NextResponse.json({
         paymentStatus: "completed",
@@ -441,13 +513,13 @@ export async function POST(request: NextRequest) {
     const matchingConfirmedPayments = observedConfirmedPayments.filter(
       (payment) =>
         !session.knownConfirmedTxIds.has(payment.transactionHash) &&
-        BigInt(payment.amountSompi) >= BigInt(expectedAmountSompi),
+        BigInt(payment.amountSompi) === BigInt(expectedAmountSompi),
     );
 
     const matchingPendingPayments = observedPendingPayments.filter(
       (payment) =>
         !session.knownPendingTxIds.has(payment.transactionHash) &&
-        BigInt(payment.amountSompi) >= BigInt(expectedAmountSompi),
+        BigInt(payment.amountSompi) === BigInt(expectedAmountSompi),
     );
 
     for (const payment of matchingPendingPayments) {
@@ -471,7 +543,7 @@ export async function POST(request: NextRequest) {
     }
 
     session.updatedAt = now;
-    paymentSessions.set(sessionId, session);
+    typedPaymentSessions.set(sessionId, session);
 
     const trackedConfirmedPayments = observedConfirmedPayments.filter((payment) =>
       session.trackedCandidatePayments.has(payment.transactionHash),
@@ -501,7 +573,7 @@ export async function POST(request: NextRequest) {
           await maybeSubmitSweepTransaction();
         }
         session.updatedAt = now;
-        paymentSessions.set(sessionId, session);
+        typedPaymentSessions.set(sessionId, session);
 
         return NextResponse.json({
           paymentStatus: "completed",
@@ -518,7 +590,7 @@ export async function POST(request: NextRequest) {
       }
 
       session.updatedAt = now;
-      paymentSessions.set(sessionId, session);
+      typedPaymentSessions.set(sessionId, session);
 
       return NextResponse.json({
         paymentStatus: "pending_confirmation",
@@ -555,6 +627,14 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error("Payment check error:", error);
+
+    if (reservedSessionId) {
+      const maybeReserved = typedPaymentSessions.get(reservedSessionId);
+      if (maybeReserved?.initializing) {
+        typedPaymentSessions.delete(reservedSessionId);
+      }
+    }
+
     return NextResponse.json({ error: "Failed to check payment status" }, { status: 500 });
   } finally {
     client.disconnect();
