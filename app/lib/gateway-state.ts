@@ -9,7 +9,7 @@ const SESSION_TTL_MS = 6 * 60 * 60 * 1000;
 
 // Separate from SESSION_TTL_MS: this controls how long a session blocks other sessions
 // if the client stops polling / abandons the payment.
-const ACTIVE_LOCK_TTL_MS = Number.parseInt(process.env.PAYMENT_GATEWAY_ACTIVE_LOCK_TTL_MS ?? "900000", 10);
+const ACTIVE_LOCK_TTL_MS = Number.parseInt(process.env.PAYMENT_GATEWAY_ACTIVE_LOCK_TTL_MS ?? "300000", 10);
 
 // Remember expired session IDs for a while so clients that keep polling don't
 // accidentally re-initialize the same session after timeout.
@@ -18,7 +18,7 @@ const expiredSessionIds = new Map<string, number>();
 export const paymentSessions = new Map<string, PaymentSessionLike>();
 
 export function getActiveLockTtlMs(): number {
-  return Number.isFinite(ACTIVE_LOCK_TTL_MS) && ACTIVE_LOCK_TTL_MS > 0 ? ACTIVE_LOCK_TTL_MS : 15 * 60 * 1000;
+  return Number.isFinite(ACTIVE_LOCK_TTL_MS) && ACTIVE_LOCK_TTL_MS > 0 ? ACTIVE_LOCK_TTL_MS : 5 * 60 * 1000;
 }
 
 export function isSessionExpired(sessionId: string, now = Date.now()): boolean {
@@ -38,6 +38,11 @@ export function clearExpiredSession(sessionId: string) {
 function markSessionExpired(sessionId: string, now: number, ttlMs: number) {
   const clampedTtlMs = Number.isFinite(ttlMs) && ttlMs > 0 ? ttlMs : getActiveLockTtlMs();
   expiredSessionIds.set(sessionId, now + clampedTtlMs);
+}
+
+export function expireSessionNow(sessionId: string, now = Date.now(), ttlMs?: number) {
+  paymentSessions.delete(sessionId);
+  markSessionExpired(sessionId, now, ttlMs ?? getActiveLockTtlMs());
 }
 
 export function pruneExpiredSessions(now = Date.now()) {

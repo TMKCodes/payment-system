@@ -275,21 +275,13 @@ export default function Home() {
 
   // Ensure this only runs on client
   useEffect(() => {
-    setIsClient(true);
-    void fetchLiveRates();
+    const timeoutId = window.setTimeout(() => {
+      setIsClient(true);
+      void fetchLiveRates();
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
   }, []);
-
-  useEffect(() => {
-    if (!qrCode || !address || !sessionAmountHtn || !paymentSessionId || isPaymentComplete) {
-      return;
-    }
-
-    const intervalId = setInterval(() => {
-      void checkPayment({ silent: true });
-    }, 5000);
-
-    return () => clearInterval(intervalId);
-  }, [qrCode, address, sessionAmountHtn, paymentSessionId, isPaymentComplete]);
 
   const checkPayment = async ({ silent = false }: { silent?: boolean } = {}) => {
     if (!address || !sessionAmountHtn || !paymentSessionId) return;
@@ -394,6 +386,19 @@ export default function Home() {
       setPaymentStatus("Error checking payment: " + (error as Error).message);
     }
   };
+
+  useEffect(() => {
+    if (!qrCode || !address || !sessionAmountHtn || !paymentSessionId || isPaymentComplete) {
+      return;
+    }
+
+    const intervalId = setInterval(() => {
+      void checkPayment({ silent: true });
+    }, 5000);
+
+    return () => clearInterval(intervalId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qrCode, address, sessionAmountHtn, paymentSessionId, isPaymentComplete]);
 
   const cancelPayment = async () => {
     try {
