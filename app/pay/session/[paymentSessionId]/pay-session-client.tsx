@@ -16,6 +16,11 @@ type CheckPaymentResponse = {
   sessionInitialized: boolean;
 };
 
+type BusyResponse = {
+  error?: string;
+  canTakeOver?: boolean;
+};
+
 function isProbablySafeReturnUrl(url: string | undefined): boolean {
   if (!url) return false;
   try {
@@ -49,7 +54,12 @@ export default function PaySessionClient(props: {
   const [expectedAmountHtn, setExpectedAmountHtn] = useState<string>(amountHtn);
   const [isNotifying, setIsNotifying] = useState<boolean>(false);
   const [hasExpired, setHasExpired] = useState<boolean>(false);
+  const [isChecking, setIsChecking] = useState<boolean>(false);
+  const [isCancelling, setIsCancelling] = useState<boolean>(false);
+  const [shouldAutoWatch, setShouldAutoWatch] = useState<boolean>(true);
+  const [canTakeOverSession, setCanTakeOverSession] = useState<boolean>(false);
   const notifyOnceRef = useRef<boolean>(false);
+  const autoRedirectOnceRef = useRef<boolean>(false);
 
   const canRedirect = useMemo(() => isProbablySafeReturnUrl(returnUrl), [returnUrl]);
 
@@ -72,7 +82,41 @@ export default function PaySessionClient(props: {
     window.location.assign(url);
   };
 
-  const initialize = async () => {
+  const cancelPayment = async () => {
+    setShouldAutoWatch(false);
+    setIsCancelling(true);
+    setErrorText("");
+    setStatusText("Cancelling payment session...");
+
+    try {
+      if (merchantAddress && amountHtn) {
+        await fetch("/api/check-payment", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            address: merchantAddress,
+            amount: amountHtn,
+            sessionId: paymentSessionId,
+            action: "cancel-session",
+          }),
+        });
+      }
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setIsCancelling(false);
+    }
+
+    if (canRedirect) {
+      redirectToReturnUrl("cancelled");
+      return;
+    }
+
+    setHasExpired(true);
+    setStatusText("Payment session cancelled. You can close this window.");
+  };
+
+  const initialize = async (options?: { forceTakeover?: boolean }) => {
     if (!amountHtn || Number.isNaN(Number(amountHtn)) || Number(amountHtn) <= 0) {
       setErrorText("Missing or invalid amount.");
       setStatusText("Cannot start payment session.");
@@ -80,7 +124,9 @@ export default function PaySessionClient(props: {
     }
 
     try {
+      setIsChecking(true);
       setErrorText("");
+      setCanTakeOverSession(false);
       setStatusText("Fetching merchant address...");
 
       const merchantResponse = await fetch("/api/merchant/address", { method: "GET" });
@@ -107,44 +153,40 @@ export default function PaySessionClient(props: {
 
       setStatusText("Initializing payment session...");
 
-      const delay = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms));
+      const initResponse = await fetch("/api/check-payment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          address: merchantData.address,
+          amount: amountHtn,
+          sessionId: paymentSessionId,
+          forceTakeover: options?.forceTakeover === true,
+        }),
+      });
 
-      let initData: Partial<CheckPaymentResponse> | null = null;
-
-      while (true) {
-        const initResponse = await fetch("/api/check-payment", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            address: merchantData.address,
-            amount: amountHtn,
-            sessionId: paymentSessionId,
-          }),
-        });
-
-        if (initResponse.status === 410) {
-          const expiredData = (await initResponse.json().catch(() => ({}))) as { error?: string };
-          setHasExpired(true);
-          setErrorText("");
-          setStatusText(expiredData.error ?? "Payment session expired. Please restart checkout.");
-          return;
-        }
-
-        if (initResponse.status === 409) {
-          const busyData = (await initResponse.json().catch(() => ({}))) as { error?: string };
-          setErrorText("");
-          setStatusText(busyData.error ?? "Gateway busy. Waiting for availability...");
-          await delay(5000);
-          continue;
-        }
-
-        if (!initResponse.ok) {
-          throw new Error(`Failed to initialize payment session (${initResponse.status})`);
-        }
-
-        initData = (await initResponse.json()) as Partial<CheckPaymentResponse>;
-        break;
+      if (initResponse.status === 410) {
+        const expiredData = (await initResponse.json().catch(() => ({}))) as { error?: string };
+        setHasExpired(true);
+        setErrorText("");
+        setStatusText(expiredData.error ?? "Payment session expired. Please restart checkout.");
+        return;
       }
+
+      if (initResponse.status === 409) {
+        const busyData = (await initResponse.json().catch(() => ({}))) as BusyResponse;
+        setCanTakeOverSession(Boolean(busyData.canTakeOver));
+        setErrorText("");
+        setStatusText(
+          busyData.error ?? "Gateway busy. You can wait a moment or take over the checkout from the stuck session.",
+        );
+        return;
+      }
+
+      if (!initResponse.ok) {
+        throw new Error(`Failed to initialize payment session (${initResponse.status})`);
+      }
+
+      const initData = (await initResponse.json()) as Partial<CheckPaymentResponse>;
 
       if (typeof initData.expectedAmountHtn === "string") {
         setExpectedAmountHtn(initData.expectedAmountHtn);
@@ -155,6 +197,8 @@ export default function PaySessionClient(props: {
       console.error(error);
       setErrorText((error as Error).message ?? "Failed to initialize");
       setStatusText("Error preparing payment.");
+    } finally {
+      setIsChecking(false);
     }
   };
 
@@ -162,6 +206,8 @@ export default function PaySessionClient(props: {
     if (!merchantAddress || !amountHtn || hasExpired) return;
 
     try {
+      setIsChecking(true);
+      setErrorText("");
       if (!silent) setStatusText("Checking payment...");
 
       const response = await fetch("/api/check-payment", {
@@ -184,18 +230,23 @@ export default function PaySessionClient(props: {
       }
 
       if (response.status === 409) {
-        const busyData = (await response.json().catch(() => ({}))) as { error?: string };
+        const busyData = (await response.json().catch(() => ({}))) as BusyResponse;
         setIsComplete(false);
         setErrorText("");
-        setStatusText(busyData.error ?? "Gateway busy. Please wait...");
+        setCanTakeOverSession(Boolean(busyData.canTakeOver));
+        setStatusText(busyData.error ?? "Gateway busy. Please try again shortly.");
         return;
       }
 
       if (!response.ok) {
-        throw new Error(`Failed to check payment (${response.status})`);
+        setIsComplete(false);
+        setErrorText(`Gateway check failed (${response.status}).`);
+        setStatusText("Payment check failed. Try again manually.");
+        return;
       }
 
       const data = (await response.json()) as CheckPaymentResponse;
+      setCanTakeOverSession(false);
       setExpectedAmountHtn(data.expectedAmountHtn);
       setPaymentDetails(data.paymentDetails);
 
@@ -229,6 +280,8 @@ export default function PaySessionClient(props: {
       console.error(error);
       setErrorText((error as Error).message ?? "Failed to poll payment");
       if (!silent) setStatusText("Error checking payment.");
+    } finally {
+      setIsChecking(false);
     }
   };
 
@@ -269,57 +322,64 @@ export default function PaySessionClient(props: {
     }
   };
 
-  const cancelSession = async () => {
-    if (!merchantAddress || !amountHtn) return;
-    try {
-      await fetch("/api/check-payment", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          address: merchantAddress,
-          amount: amountHtn,
-          sessionId: paymentSessionId,
-          action: "cancel-session",
-        }),
-      });
-    } catch {
-      // best-effort cancel
+  const handleCompletedPayment = async () => {
+    if (!returnUrl) {
+      setStatusText("Payment confirmed. You can close this window.");
+      return;
+    }
+
+    await notifyWooCommerce();
+
+    if (canRedirect && !autoRedirectOnceRef.current) {
+      autoRedirectOnceRef.current = true;
+      setStatusText("Payment confirmed. Returning to ORI Protocol...");
+      window.setTimeout(() => {
+        redirectToReturnUrl("paid");
+      }, 1200);
+      return;
+    }
+
+    if (canRedirect) {
+      setStatusText("Payment confirmed. Returning to ORI Protocol.");
+    } else {
+      setStatusText("Payment confirmed. You can close this window.");
     }
   };
 
   useEffect(() => {
-    void initialize();
+    const timeoutId = window.setTimeout(() => {
+      void initialize();
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paymentSessionId]);
 
   useEffect(() => {
-    if (!merchantAddress || !qrCodeDataUrl || !amountHtn || isComplete || hasExpired) return;
+    if (!shouldAutoWatch || !merchantAddress || !amountHtn || hasExpired || isComplete) {
+      return;
+    }
 
     const intervalId = window.setInterval(() => {
+      if (document.visibilityState !== "visible") {
+        return;
+      }
+
       void poll(true);
-    }, 5000);
+    }, 7500);
 
     return () => window.clearInterval(intervalId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [merchantAddress, qrCodeDataUrl, amountHtn, paymentSessionId, isComplete, hasExpired]);
+  }, [shouldAutoWatch, merchantAddress, amountHtn, hasExpired, isComplete, paymentSessionId]);
 
   useEffect(() => {
     if (!isComplete) return;
 
-    void (async () => {
-      if (!returnUrl) {
-        setStatusText("Payment confirmed. You can close this window.");
-        return;
-      }
+    const timeoutId = window.setTimeout(() => {
+      void handleCompletedPayment();
+    }, 0);
 
-      await notifyWooCommerce();
-
-      if (canRedirect) {
-        setStatusText("Payment confirmed. Click continue to return to store.");
-      } else {
-        setStatusText("Payment confirmed. You can close this window.");
-      }
-    })();
+    return () => window.clearTimeout(timeoutId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isComplete]);
 
@@ -362,45 +422,37 @@ export default function PaySessionClient(props: {
           <div className="mt-5 text-center text-gray-500">Generating QR...</div>
         )}
 
-        <div className="mt-6 flex items-center justify-between gap-3">
+        {!isComplete && !hasExpired ? (
+          <div className="mt-6">
+            <button
+              type="button"
+              onClick={() => void cancelPayment()}
+              className="w-full text-sm px-3 py-2 rounded border border-red-300 bg-red-50 text-red-700 hover:bg-red-100 disabled:opacity-60"
+              disabled={isCancelling}
+            >
+              {isCancelling ? "Cancelling..." : "Cancel payment"}
+            </button>
+          </div>
+        ) : null}
+
+        {canTakeOverSession && !isComplete ? (
           <button
             type="button"
-            onClick={() => void poll(false)}
-            className="text-sm px-3 py-2 rounded border border-gray-300 bg-white hover:bg-gray-50"
-            disabled={isComplete}
+            onClick={() => void initialize({ forceTakeover: true })}
+            className="mt-3 w-full rounded border border-amber-400 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900 hover:bg-amber-100"
+            disabled={isChecking}
           >
-            Refresh
+            {isChecking ? "Taking over..." : "Take over stuck checkout"}
           </button>
-          {isComplete ? (
-            <button
-              type="button"
-              onClick={() => {
-                if (canRedirect) redirectToReturnUrl("paid");
-              }}
-              className="text-sm px-3 py-2 rounded border border-green-700 bg-green-700 text-white hover:bg-green-800 disabled:opacity-60"
-              disabled={!canRedirect}
-            >
-              Continue
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => {
-                void (async () => {
-                  await cancelSession();
-                  if (canRedirect) redirectToReturnUrl("cancel");
-                })();
-              }}
-              className="text-sm px-3 py-2 rounded border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-60"
-              disabled={!canRedirect}
-            >
-              Cancel
-            </button>
-          )}
-        </div>
+        ) : null}
 
         {!canRedirect && returnUrl ? (
           <div className="mt-3 text-xs text-red-600">Invalid return URL provided.</div>
+        ) : null}
+        {!isComplete ? (
+          <div className="mt-3 text-xs text-gray-500">
+            While this checkout page is open, the gateway keeps watching for the payment and returns to ORI Protocol automatically after confirmation.
+          </div>
         ) : null}
       </div>
     </div>

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { HoosatClient, HoosatCrypto, HoosatTxBuilder, HoosatUtils, type UtxoForSigning } from "hoosat-sdk";
 import {
   clearExpiredSession,
+  expireSessionNow,
   findActiveSessionForAddressAndAmount,
   isSessionExpired,
   paymentSessions,
@@ -302,7 +303,7 @@ export async function POST(request: NextRequest) {
     const now = Date.now();
     pruneExpiredSessions(now);
 
-    const { address, amount, sessionId, action } = await request.json();
+    const { address, amount, sessionId, action, forceTakeover } = await request.json();
 
     if (!address) {
       return NextResponse.json({ error: "Merchant address is required" }, { status: 400 });
@@ -353,15 +354,20 @@ export async function POST(request: NextRequest) {
       });
 
       if (activeOther) {
+        if (forceTakeover === true || action === "force-takeover-session") {
+          expireSessionNow(activeOther.sessionId, now);
+        } else {
         return NextResponse.json(
           {
             paymentStatus: "gateway_in_use",
             activeSessionId: activeOther.sessionId,
             retryAfterSeconds: 5,
             error: "Payment gateway is currently processing another payment session.",
+            canTakeOver: true,
           },
           { status: 409 },
         );
+        }
       }
 
       if (!existingSessionMatches) {
