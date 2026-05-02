@@ -2,6 +2,7 @@ type PaymentSessionLike = {
   address: string;
   amountSompi?: string;
   completedPayment: unknown | null;
+  createdAt?: number;
   updatedAt: number;
 };
 
@@ -11,6 +12,10 @@ const SESSION_TTL_MS = 6 * 60 * 60 * 1000;
 // if the client stops polling / abandons the payment.
 const ACTIVE_LOCK_TTL_MS = Number.parseInt(process.env.PAYMENT_GATEWAY_ACTIVE_LOCK_TTL_MS ?? "900000", 10);
 
+// Hard max session lifetime. Even if the client keeps polling, the session will
+// be expired after this duration to avoid the gateway becoming stuck.
+const SESSION_MAX_AGE_MS = Number.parseInt(process.env.PAYMENT_GATEWAY_SESSION_MAX_AGE_MS ?? "900000", 10);
+
 // Remember expired session IDs for a while so clients that keep polling don't
 // accidentally re-initialize the same session after timeout.
 const expiredSessionIds = new Map<string, number>();
@@ -19,6 +24,10 @@ export const paymentSessions = new Map<string, PaymentSessionLike>();
 
 export function getActiveLockTtlMs(): number {
   return Number.isFinite(ACTIVE_LOCK_TTL_MS) && ACTIVE_LOCK_TTL_MS > 0 ? ACTIVE_LOCK_TTL_MS : 15 * 60 * 1000;
+}
+
+export function getSessionMaxAgeMs(): number {
+  return Number.isFinite(SESSION_MAX_AGE_MS) && SESSION_MAX_AGE_MS > 0 ? SESSION_MAX_AGE_MS : 15 * 60 * 1000;
 }
 
 export function isSessionExpired(sessionId: string, now = Date.now()): boolean {
@@ -42,12 +51,23 @@ function markSessionExpired(sessionId: string, now: number, ttlMs: number) {
 
 export function pruneExpiredSessions(now = Date.now()) {
   const lockTtlMs = getActiveLockTtlMs();
+  const sessionMaxAgeMs = getSessionMaxAgeMs();
 
   for (const [sessionId, session] of paymentSessions.entries()) {
-    if (!session.completedPayment && now - session.updatedAt > lockTtlMs) {
-      paymentSessions.delete(sessionId);
-      markSessionExpired(sessionId, now, lockTtlMs);
-      continue;
+    if (!session.completedPayment) {
+      const createdAt = typeof session.createdAt === "number" ? session.createdAt : session.updatedAt;
+
+      if (now - createdAt > sessionMaxAgeMs) {
+        paymentSessions.delete(sessionId);
+        markSessionExpired(sessionId, now, lockTtlMs);
+        continue;
+      }
+
+      if (now - session.updatedAt > lockTtlMs) {
+        paymentSessions.delete(sessionId);
+        markSessionExpired(sessionId, now, lockTtlMs);
+        continue;
+      }
     }
 
     if (now - session.updatedAt > SESSION_TTL_MS) {
@@ -69,6 +89,7 @@ export function findActiveSessionForAddress(
   const now = options.now ?? Date.now();
   const ignoreSessionId = options.ignoreSessionId;
   const lockTtlMs = getActiveLockTtlMs();
+  const sessionMaxAgeMs = getSessionMaxAgeMs();
 
   let best: { sessionId: string; session: PaymentSessionLike } | null = null;
 
@@ -76,6 +97,9 @@ export function findActiveSessionForAddress(
     if (ignoreSessionId && sessionId === ignoreSessionId) continue;
     if (session.address !== address) continue;
     if (session.completedPayment) continue;
+
+    const createdAt = typeof session.createdAt === "number" ? session.createdAt : session.updatedAt;
+    if (now - createdAt > sessionMaxAgeMs) continue;
 
     // Treat the session as active only if we have seen recent activity.
     if (now - session.updatedAt > lockTtlMs) continue;
@@ -93,11 +117,15 @@ export function findAnyActiveSession(
 ): { sessionId: string; session: PaymentSessionLike } | null {
   const now = options.now ?? Date.now();
   const lockTtlMs = getActiveLockTtlMs();
+  const sessionMaxAgeMs = getSessionMaxAgeMs();
 
   let best: { sessionId: string; session: PaymentSessionLike } | null = null;
 
   for (const [sessionId, session] of paymentSessions.entries()) {
     if (session.completedPayment) continue;
+
+    const createdAt = typeof session.createdAt === "number" ? session.createdAt : session.updatedAt;
+    if (now - createdAt > sessionMaxAgeMs) continue;
     if (now - session.updatedAt > lockTtlMs) continue;
 
     if (!best || session.updatedAt > best.session.updatedAt) {
@@ -116,6 +144,7 @@ export function findActiveSessionForAddressAndAmount(
   const now = options.now ?? Date.now();
   const ignoreSessionId = options.ignoreSessionId;
   const lockTtlMs = getActiveLockTtlMs();
+  const sessionMaxAgeMs = getSessionMaxAgeMs();
 
   let best: { sessionId: string; session: PaymentSessionLike } | null = null;
 
@@ -124,6 +153,9 @@ export function findActiveSessionForAddressAndAmount(
     if (session.address !== address) continue;
     if (session.amountSompi !== amountSompi) continue;
     if (session.completedPayment) continue;
+
+    const createdAt = typeof session.createdAt === "number" ? session.createdAt : session.updatedAt;
+    if (now - createdAt > sessionMaxAgeMs) continue;
     if (now - session.updatedAt > lockTtlMs) continue;
 
     if (!best || session.updatedAt > best.session.updatedAt) {
