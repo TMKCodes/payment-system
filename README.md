@@ -104,6 +104,12 @@ The container listens on port `5645` and runs the standalone Next.js server with
 7. Display the QR code to the buyer
 8. Buyer scans the QR code with their Hoosat wallet to complete the payment
 
+## Developer integration tutorial
+
+If you want to integrate this gateway into your own system (custom checkout, backend verification, webhooks), see:
+
+- [docs/DEVELOPER_GATEWAY_INTEGRATION.md](docs/DEVELOPER_GATEWAY_INTEGRATION.md)
+
 ## WooCommerce integration
 
 This plugin adds a **Hoosat (HTN)** payment method to WooCommerce and redirects customers to a hosted payment page on your HTN gateway.
