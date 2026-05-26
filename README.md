@@ -42,13 +42,7 @@ A minimal HTN payment gateway for Hoosat cryptocurrency. Allows merchants to cre
    cd HTN-Payment-Gateway
    ```
 
-4. **Install the project dependencies**
-
-   ```bash
-   npm install
-   ```
-
-5. **Download genkeypair**
+4. **Download genkeypair**
 
    Genkeypair is a tool included with (HTND)[https://github.com/HoosatNetwork/HTND/releases/tag/v1.7.0] node, which can be used to generate keypair,
    so download latest release of (HTND)[https://github.com/HoosatNetwork/HTND/releases/tag/v1.7.0] and extract it. 
@@ -61,7 +55,13 @@ A minimal HTN payment gateway for Hoosat cryptocurrency. Allows merchants to cre
 
    and it generates private key with single address for your HTN payment gateway. 
 
-5. **Configure merchant wallet:**
+5. **Install the project dependencies**
+
+   ```bash
+   npm install
+   ```
+
+6. **Configure merchant wallet:**
 
    Create a `.env.local` file in the project root:
 
@@ -93,7 +93,7 @@ A minimal HTN payment gateway for Hoosat cryptocurrency. Allows merchants to cre
    # NEXT_PUBLIC_EUR_TO_HTN_RATE=13.1
    ```
 
-6. **Build and run thedevelopment server:**
+7. **Build and run thedevelopment server:**
    ```bash
    npm run build
    npm run start
@@ -103,21 +103,21 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 ## Docker
 
-This repo includes a production Dockerfile for the hosted Next.js payment gateway. You need to follow steps from the setup process up to 5, before moving to use docker. 
+This repo includes a production Dockerfile for the hosted Next.js payment gateway. You need to follow steps from the setup process up to step 4, before you can move to use docker. I expect you installed docker with git and node.js
 
-## Copy dockerfile to root project
+5. **Copy dockerfile to root project**
 
 ```bash
 cp docker/Dockerfile Dockerfile
 ```
 
-### Build the image
+6. **Build the image**
 
 ```bash
 docker build -t htn-payment-gateway .
 ```
 
-### Run the container
+7. **Run the container**
 
 ```bash
 docker run --rm --network host \
